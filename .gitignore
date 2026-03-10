@@ -1,0 +1,8 @@
+.pytest_cache
+.venv
+.cache
+__pycache__
+.DS_Store
+*.avi
+*.mp4
+site/
