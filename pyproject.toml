@@ -46,6 +46,8 @@ dev-torch = [
 docs = [
     "zensical>=0.0.24",
     "mkdocstrings[python]>=0.27",
+    # mkdocstrings <1.0.7 (the last release for Python <3.12) breaks with pymdown-extensions 12
+    "pymdown-extensions<12; python_version < '3.12'",
 ]
 
 [project.scripts]
