@@ -21,6 +21,7 @@ This produces `input_flow.mp4` in the same directory using the DIS method with H
 
 - Optical flow methods: DIS, Farneback, TV-L1 and Lucas-Kanade on the CPU; RAFT, SEA-RAFT and NeuFlow v2 with PyTorch
 - Chromatic motion (BehaveAI's encoding): recent movement blue, older green and red
+- Event camera simulation, with the event stream saved as HDF5, NumPy or text
 - Visualisation styles: HSV colour wheel, speed heatmap, quiver arrows; any of them can be drawn over the original frame, with a colour key
 - One colour scale for the whole video by default, so the same colour means the same speed in every frame
 - Streaming frame-by-frame processing — handles multi-hour videos without loading into memory

@@ -20,6 +20,13 @@ For BehaveAI's chromatic motion, `motionflow.chromatic` works the same way:
 result = motionflow.chromatic("recording.mp4", motion_only=True, frame_skip=3)
 ```
 
+and so does the event camera simulation, which can save the events too:
+
+```python
+result = motionflow.events("recording.mp4", window=8, save_events="recording.h5")
+print(result.info["events"])  # how many events
+```
+
 ## Frames line up with the input
 
 The output has one frame per input frame. Output frame *i* shows the motion from input frame *i − 1* to frame *i*, and frame 0, which has no frame before it, shows no motion. So output frame *i* can be matched to anything else recorded at input frame *i*, such as pose tracking or neural recordings.
