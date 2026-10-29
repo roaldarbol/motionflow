@@ -351,9 +351,12 @@ class VideoReader:
         if stream.time_base is None or not container.duration:
             return None
         try:
-            target = int((seconds + self._t0) / stream.time_base)
-            container.seek(target, stream=stream, backward=True)
+            self._seek(int((seconds + self._t0) / stream.time_base))
         except av.error.FFmpegError:
+            # Some files refuse to seek (PyAV reports "Operation not
+            # permitted" for some MP4s that FFmpeg's command line seeks fine).
+            # The failed attempt can leave the demuxer mid-file, so reopen.
+            self._reopen()
             return None
         self._decoded = self._decode()
         first = True
@@ -366,13 +369,23 @@ class VideoReader:
             first = False
             if time >= seconds - 1e-6:
                 return frame, round(time * self._rate)
-        # Seeking didn't work: reopen and decode from the beginning.
-        container.close()
+        # Seeking didn't land where asked: decode from the beginning instead.
+        self._reopen()
+        return None
+
+    def _seek(self, target: int) -> None:
+        """Seek the video stream to ``target`` (in stream time base units)."""
+        assert self._container is not None
+        self._container.seek(target, stream=self._stream, backward=True)
+
+    def _reopen(self) -> None:
+        """Open the file again, ready to decode from the first frame."""
+        if self._container is not None:
+            self._container.close()
         self._container = av.open(str(self._path))
         self._stream = self._container.streams.video[0]
         self._stream.thread_type = "AUTO"
         self._decoded = self._decode()
-        return None
 
     def _to_image(self, frame: av.VideoFrame) -> np.ndarray:
         if self._scale == 1.0:
