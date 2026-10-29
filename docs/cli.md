@@ -47,7 +47,7 @@ Progress bars only appear in an interactive terminal, so logs from batch jobs (S
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `-m, --method METHOD` | `farneback` | Flow method. See [Methods](methods.md), or run `motionflow methods`. |
+| `-m, --method METHOD` | `dis` | Flow method. See [Methods](methods.md), or run `motionflow methods`. |
 | `--stride INT` | `1` | Estimate flow every N frames, between frames N apart, and show it until the next estimate. Magnitudes stay in pixels per frame. Faster; the first N frames show no motion. |
 | `--smooth INT` | `0` | Average the flow over a window of N frames centred on each frame, so smoothing doesn't lag behind the motion. |
 | `--device TEXT` | `auto` | Deep methods: `auto`, `cuda`, `mps` or `cpu`. |
@@ -88,7 +88,7 @@ Every command has these.
 
 ## Examples
 
-Basic usage with defaults (Farneback, HSV visualisation):
+Basic usage with defaults (DIS, HSV visualisation):
 
 ```bash
 motionflow recording.mp4

@@ -2,7 +2,7 @@
 
 ## PyPI (pip / uv)
 
-The base install includes OpenCV with its contrib modules and covers all classical methods (Farneback, TV-L1, Lucas-Kanade):
+The base install includes OpenCV with its contrib modules and covers all classical methods (DIS, Farneback, TV-L1, Lucas-Kanade):
 
 ```bash
 pip install motionflow

@@ -20,7 +20,7 @@ A conda-forge package is planned. See the [installation guide](https://roaldarbo
 ### CLI
 
 ```bash
-# HSV colour-wheel flow (default: Farneback)
+# HSV colour-wheel flow (default method: DIS)
 motionflow recording.mp4
 
 # RAFT on GPU, heatmap style, every other frame
@@ -55,10 +55,10 @@ print(result.output)  # recording_flow.mp4, one frame per input frame
 
 ```python
 import cv2
-from motionflow.methods import FarnebackFlow
+from motionflow.methods import DISFlow
 from motionflow.viz import flow_to_hsv
 
-flow = FarnebackFlow()(prev_frame, curr_frame)  # (H, W, 2)
+flow = DISFlow()(prev_frame, curr_frame)  # (H, W, 2)
 vis  = flow_to_hsv(flow)                         # BGR image
 ```
 
@@ -66,7 +66,8 @@ vis  = flow_to_hsv(flow)                         # BGR image
 
 | Method | Type | GPU | Notes |
 |--------|------|-----|-------|
-| `farneback` | Dense | No | Default, fast |
+| `dis` | Dense | No | Default; fast and accurate |
+| `farneback` | Dense | No | The default before 0.2 |
 | `tvl1` | Dense | No | Sharp edges, slow |
 | `lucas-kanade` | Sparse | No | Tracks points; drawn as dots or arrows |
 | `raft` | Dense | Yes | High quality; weights auto-downloaded |

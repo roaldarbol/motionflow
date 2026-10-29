@@ -4,6 +4,7 @@
 
 ### Added
 
+- **DIS optical flow** (`--method dis`, `DISFlow`), now the default. On 720p and 1080p test sequences with known motion it was 3–4× faster than Farneback and more accurate, including on large motions Farneback couldn't follow (#20).
 - **Subcommands**: `motionflow flow VIDEO`, with `motionflow VIDEO` as the short form, so existing commands keep working; and `motionflow methods`, which lists the methods and whether they can run here. Room for the coming commands (#14).
 - **Several inputs at once**: files, folders and patterns such as `'trials/*.mp4'`, with `-o` as an output folder. Folders skip earlier outputs (`*_flow.*`); a failing video doesn't stop the rest (#14).
 - `-q/--quiet`, `-v/--verbose` (full error details), `-h`, `-V`, and `python -m motionflow` (#14).
@@ -32,6 +33,7 @@
 
 ### Changed
 
+- **The default method is DIS** instead of Farneback (#20). Use `--method farneback` for results like motionflow 0.1's; `process_video` keeps Farneback.
 - The command line prints output paths on stdout, one per line, and everything else on stderr, so `out=$(motionflow video.mp4)` works. Progress bars only appear in an interactive terminal, so batch-job logs stay clean. Exit status 1 means a video failed, 2 a usage error, 130 Ctrl-C (#14).
 - Options that have no effect with the other options given (such as `--quiver-step` without `--viz quiver`) are reported instead of silently ignored (#14).
 - `-o` without an extension is a folder.

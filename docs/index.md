@@ -15,11 +15,11 @@ pip install "motionflow[torch]"
 motionflow input.mp4
 ```
 
-This produces `input_flow.mp4` in the same directory using the Farneback method with HSV colour-wheel visualisation.
+This produces `input_flow.mp4` in the same directory using the DIS method with HSV colour-wheel visualisation.
 
 ## Features
 
-- Optical flow methods: Farneback, TV-L1, Lucas-Kanade and RAFT (SEA-RAFT and NeuFlow v2 are being reworked, [#16](https://github.com/roaldarbol/motionflow/issues/16))
+- Optical flow methods: DIS, Farneback, TV-L1, Lucas-Kanade and RAFT (SEA-RAFT and NeuFlow v2 are being reworked, [#16](https://github.com/roaldarbol/motionflow/issues/16))
 - Visualisation styles: HSV colour wheel, speed heatmap, quiver arrows; any of them can be drawn over the original frame, with a colour key
 - One colour scale for the whole video by default, so the same colour means the same speed in every frame
 - Streaming frame-by-frame processing — handles multi-hour videos without loading into memory
