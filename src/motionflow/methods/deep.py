@@ -72,7 +72,7 @@ def _require_vendor(name: str, sentinel: str) -> None:
             )
         print("  Please enter y or n.", file=sys.stderr)
 
-    from motionflow.methods._vendor_setup import setup_sea_raft, setup_neuflow_v2
+    from motionflow.methods._vendor_setup import setup_neuflow_v2, setup_sea_raft
 
     if name == "sea_raft":
         setup_sea_raft()
@@ -112,11 +112,11 @@ class RAFTFlow(FlowEstimator):
         self._iters = iters
 
         if size == "small":
-            from torchvision.models.optical_flow import raft_small, Raft_Small_Weights
+            from torchvision.models.optical_flow import Raft_Small_Weights, raft_small
 
             self._model = raft_small(weights=Raft_Small_Weights.DEFAULT)
         else:
-            from torchvision.models.optical_flow import raft_large, Raft_Large_Weights
+            from torchvision.models.optical_flow import Raft_Large_Weights, raft_large
 
             self._model = raft_large(weights=Raft_Large_Weights.DEFAULT)
 
@@ -137,9 +137,7 @@ class RAFTFlow(FlowEstimator):
 
         return flow
 
-    def _preprocess(
-        self, frame: np.ndarray
-    ) -> tuple[object, tuple[int, int]]:
+    def _preprocess(self, frame: np.ndarray) -> tuple[object, tuple[int, int]]:
         h, w = frame.shape[:2]
         pad_h = (8 - h % 8) % 8
         pad_w = (8 - w % 8) % 8
@@ -203,20 +201,18 @@ class SEARaftFlow(FlowEstimator):
 
     def _load_model(self, size: str) -> object:
         import sys
+
         import torch
 
         try:
             from huggingface_hub import hf_hub_download
         except ImportError:
             raise RuntimeError(
-                "SEA-RAFT requires huggingface-hub. Install with:\n"
-                "  pip install huggingface-hub"
+                "SEA-RAFT requires huggingface-hub. Install with:\n  pip install huggingface-hub"
             ) from None
 
         if size not in self._HF_REPOS:
-            raise ValueError(
-                f"Unknown SEA-RAFT size: {size!r}. Choose 'large' or 'medium'."
-            )
+            raise ValueError(f"Unknown SEA-RAFT size: {size!r}. Choose 'large' or 'medium'.")
 
         hf_repo = self._HF_REPOS[size]
         filename = self._FILENAMES[size]
@@ -261,13 +257,7 @@ class SEARaftFlow(FlowEstimator):
         import torch
 
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        return (
-            torch.from_numpy(rgb)
-            .permute(2, 0, 1)
-            .float()
-            .unsqueeze(0)
-            .to(self._device)
-        )
+        return torch.from_numpy(rgb).permute(2, 0, 1).float().unsqueeze(0).to(self._device)
 
 
 class NeuFlowV2Flow(FlowEstimator):
@@ -293,8 +283,7 @@ class NeuFlowV2Flow(FlowEstimator):
     """
 
     _WEIGHT_URL = (
-        "https://github.com/neufieldrobotics/NeuFlow_v2/releases/download/v1.0/"
-        "neuflow_v2.pth"
+        "https://github.com/neufieldrobotics/NeuFlow_v2/releases/download/v1.0/neuflow_v2.pth"
     )
     _FILENAME = "neuflow_v2.pth"
 
@@ -306,6 +295,7 @@ class NeuFlowV2Flow(FlowEstimator):
 
     def _load_model(self) -> object:
         import sys
+
         import torch
 
         def _download() -> None:
@@ -341,7 +331,6 @@ class NeuFlowV2Flow(FlowEstimator):
 
     def estimate(self, prev: np.ndarray, curr: np.ndarray) -> np.ndarray:
         import torch
-        import torch.nn.functional as F
 
         h, w = prev.shape[:2]
         pad_h = (16 - h % 16) % 16
@@ -356,20 +345,13 @@ class NeuFlowV2Flow(FlowEstimator):
         flow_np = flow[0].permute(1, 2, 0).cpu().numpy()
         return flow_np[:h, :w]
 
-    def _to_tensor(
-        self, frame: np.ndarray, pad_h: int, pad_w: int
-    ) -> object:
+    def _to_tensor(self, frame: np.ndarray, pad_h: int, pad_w: int) -> object:
         import torch
         import torch.nn.functional as F
 
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         tensor = (
-            torch.from_numpy(rgb)
-            .permute(2, 0, 1)
-            .float()
-            .div(255.0)
-            .unsqueeze(0)
-            .to(self._device)
+            torch.from_numpy(rgb).permute(2, 0, 1).float().div(255.0).unsqueeze(0).to(self._device)
         )
         if pad_h > 0 or pad_w > 0:
             tensor = F.pad(tensor, (0, pad_w, 0, pad_h))

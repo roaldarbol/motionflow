@@ -156,11 +156,11 @@ class LucasKanadeFlow(FlowEstimator):
         self.min_distance = min_distance
         self.win_size = win_size
         self.max_level = max_level
-        self._lk_params = dict(
-            winSize=win_size,
-            maxLevel=max_level,
-            criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 30, 0.01),
-        )
+        self._lk_params = {
+            "winSize": win_size,
+            "maxLevel": max_level,
+            "criteria": (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 30, 0.01),
+        }
 
     def estimate(self, prev: np.ndarray, curr: np.ndarray) -> np.ndarray:
         h, w = prev.shape[:2]
@@ -190,7 +190,7 @@ class LucasKanadeFlow(FlowEstimator):
         good_next = next_pts[status.ravel() == 1]
 
         for (x0, y0), (x1, y1) in zip(
-            good_prev.reshape(-1, 2), good_next.reshape(-1, 2)
+            good_prev.reshape(-1, 2), good_next.reshape(-1, 2), strict=True
         ):
             xi, yi = int(round(x0)), int(round(y0))
             if 0 <= yi < h and 0 <= xi < w:

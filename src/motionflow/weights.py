@@ -3,7 +3,6 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-
 _CACHE_DIR = Path.home() / ".cache" / "motionflow" / "weights"
 
 

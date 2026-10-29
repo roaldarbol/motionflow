@@ -3,8 +3,8 @@
 # - LucasKanadeFlow: output shape, dtype, sparse flow characteristics
 # - TVL1Flow: skipped if opencv-contrib not available
 # - make_estimator: correct class returned per Method
-import pytest
 import numpy as np
+import pytest
 
 from motionflow.methods import make_estimator
 from motionflow.methods.classical import FarnebackFlow, LucasKanadeFlow

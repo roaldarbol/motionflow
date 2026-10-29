@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
 import typer
 from rich.console import Console
@@ -34,7 +33,7 @@ def main(
         dir_okay=False,
         readable=True,
     ),
-    output: Optional[Path] = typer.Option(
+    output: Path | None = typer.Option(
         None,
         "--output",
         "-o",
@@ -75,7 +74,7 @@ def main(
         help="Flow magnitude normalisation. 'global' requires a full first pass.",
         show_default=True,
     ),
-    max_flow: Optional[float] = typer.Option(
+    max_flow: float | None = typer.Option(
         None,
         "--max-flow",
         help="Manual flow magnitude cap. Overrides --normalize.",
@@ -94,7 +93,7 @@ def main(
         help="FourCC codec for output video.",
         show_default=True,
     ),
-    fps: Optional[float] = typer.Option(
+    fps: float | None = typer.Option(
         None,
         "--fps",
         help="Output FPS. Preserves source FPS if not set.",
@@ -119,7 +118,7 @@ def main(
         help="Grid spacing in pixels for quiver arrows.",
         show_default=True,
     ),
-    version: Optional[bool] = typer.Option(  # noqa: UP007
+    version: bool | None = typer.Option(
         None,
         "--version",
         callback=_version_callback,

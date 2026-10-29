@@ -79,7 +79,7 @@ def flow_to_quiver(
     h, w = flow.shape[:2]
     y_coords, x_coords = np.mgrid[step // 2 : h : step, step // 2 : w : step]
 
-    for y, x in zip(y_coords.ravel(), x_coords.ravel()):
+    for y, x in zip(y_coords.ravel(), x_coords.ravel(), strict=True):
         dx, dy = flow[y, x]
         start = (int(x), int(y))
         end = (int(x + dx * scale), int(y + dy * scale))

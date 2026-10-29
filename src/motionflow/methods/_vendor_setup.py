@@ -7,6 +7,7 @@ Run once after installing motionflow if you want to use SEA-RAFT or NeuFlow v2:
 Files are placed in motionflow/methods/_vendor/ alongside the installed package.
 Re-running updates to the latest upstream commit.
 """
+
 from __future__ import annotations
 
 import sys
@@ -28,9 +29,7 @@ _VENDOR_DIR = Path(__file__).parent / "_vendor"
 # (architecture only — no training, datasets, or submission code)
 # ---------------------------------------------------------------------------
 
-_SEA_RAFT_BASE = (
-    f"https://raw.githubusercontent.com/princeton-vl/SEA-RAFT/{SEA_RAFT_COMMIT}"
-)
+_SEA_RAFT_BASE = f"https://raw.githubusercontent.com/princeton-vl/SEA-RAFT/{SEA_RAFT_COMMIT}"
 _SEA_RAFT_FILES: list[tuple[str, str]] = [
     # (remote path relative to repo root, local path relative to _vendor/sea_raft/)
     ("core/sea_raft.py", "sea_raft.py"),
@@ -45,9 +44,7 @@ _SEA_RAFT_FILES: list[tuple[str, str]] = [
 # NeuFlow v2: inference-only files
 # ---------------------------------------------------------------------------
 
-_NEUFLOW_BASE = (
-    f"https://raw.githubusercontent.com/neufieldrobotics/NeuFlow_v2/{NEUFLOW_V2_COMMIT}"
-)
+_NEUFLOW_BASE = f"https://raw.githubusercontent.com/neufieldrobotics/NeuFlow_v2/{NEUFLOW_V2_COMMIT}"
 _NEUFLOW_FILES: list[tuple[str, str]] = [
     ("neuflow.py", "neuflow.py"),
     ("backbone.py", "backbone.py"),
@@ -83,9 +80,7 @@ def setup_sea_raft(force: bool = False) -> None:
         _fetch(f"{_SEA_RAFT_BASE}/{remote_rel}", dest_dir / local_rel)
 
     # Write an __init__ that exposes the model class cleanly
-    (dest_dir / "__init__.py").write_text(
-        "from .sea_raft import RAFT as SEARaft  # noqa: F401\n"
-    )
+    (dest_dir / "__init__.py").write_text("from .sea_raft import RAFT as SEARaft  # noqa: F401\n")
     print("SEA-RAFT vendor setup complete.")
 
 
@@ -102,9 +97,7 @@ def setup_neuflow_v2(force: bool = False) -> None:
     for remote_rel, local_rel in _NEUFLOW_FILES:
         _fetch(f"{_NEUFLOW_BASE}/{remote_rel}", dest_dir / local_rel)
 
-    (dest_dir / "__init__.py").write_text(
-        "from .neuflow import NeuFlow  # noqa: F401\n"
-    )
+    (dest_dir / "__init__.py").write_text("from .neuflow import NeuFlow  # noqa: F401\n")
     print("NeuFlow v2 vendor setup complete.")
 
 
