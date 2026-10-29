@@ -4,6 +4,9 @@
 
 ### Added
 
+- **Subcommands**: `motionflow flow VIDEO`, with `motionflow VIDEO` as the short form, so existing commands keep working; and `motionflow methods`, which lists the methods and whether they can run here. Room for the coming commands (#14).
+- **Several inputs at once**: files, folders and patterns such as `'trials/*.mp4'`, with `-o` as an output folder. Folders skip earlier outputs (`*_flow.*`); a failing video doesn't stop the rest (#14).
+- `-q/--quiet`, `-v/--verbose` (full error details), `-h`, `-V`, and `python -m motionflow` (#14).
 - A colour key in the corner of the output (`--legend`, on by default): a colour wheel for `hsv`, a colour bar for `heatmap`, a reference arrow for `quiver`, labelled with the speed at full strength (#15).
 - `--min-flow` hides motion slower than a threshold; `--percentile` sets which speed is full strength; `--quiver-scale` sets the arrow length (#15).
 - `LucasKanadeFlow(points="grid")` tracks a regular grid of points; `grid_step` was accepted but ignored before (#15).
@@ -29,6 +32,9 @@
 
 ### Changed
 
+- The command line prints output paths on stdout, one per line, and everything else on stderr, so `out=$(motionflow video.mp4)` works. Progress bars only appear in an interactive terminal, so batch-job logs stay clean. Exit status 1 means a video failed, 2 a usage error, 130 Ctrl-C (#14).
+- Options that have no effect with the other options given (such as `--quiver-step` without `--viz quiver`) are reported instead of silently ignored (#14).
+- `-o` without an extension is a folder.
 - **Colours use one scale for the whole video by default** (`--normalize auto`): the 99th percentile of all motion, measured exactly on short videos and sampled on long ones. The old default, `per-frame`, stretched each frame to its own largest motion, so a still scene's noise looked like motion. `global` now uses the percentile too, rather than the single largest value, and the scale never drops below 1 px/frame (#15).
 - `--overlay` (the flow's opacity over the original frame) replaces `--blend` (the original's opacity) and `--viz blend` (#15). `process_video` still accepts `blend`.
 - **The output has one frame per input frame**, so it lines up with the input: output frame *i* shows the motion from input frame *i − 1* to *i*, and frame 0 shows none. It used to have one frame fewer (#12).

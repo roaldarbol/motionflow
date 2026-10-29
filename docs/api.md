@@ -149,7 +149,7 @@ out = process_video("recording.mp4", method="raft")         # before
 out = motionflow.flow("recording.mp4", method="raft").output  # now
 ```
 
-Its output now has as many frames as the input (it used to have one fewer), and `stride` and `smooth` behave as described in the [CLI reference](cli.md#options).
+Its output now has as many frames as the input (it used to have one fewer), and `stride` and `smooth` behave as described in the [CLI reference](cli.md#flow).
 
 ## API reference
 
