@@ -4,6 +4,8 @@
 
 ### Added
 
+- `motionflow download` fetches the deep methods' weights ahead of time; `motionflow methods` shows whether they're cached. Weights are checksummed and cached in `~/.cache/motionflow` (`MOTIONFLOW_CACHE_DIR` to move it) (#16).
+- SEA-RAFT has `small`, `medium` and `large` sizes; `--device` is checked up front with a clear message (#16).
 - **DIS optical flow** (`--method dis`, `DISFlow`), now the default. On 720p and 1080p test sequences with known motion it was 3–4× faster than Farneback and more accurate, including on large motions Farneback couldn't follow (#20).
 - **Subcommands**: `motionflow flow VIDEO`, with `motionflow VIDEO` as the short form, so existing commands keep working; and `motionflow methods`, which lists the methods and whether they can run here. Room for the coming commands (#14).
 - **Several inputs at once**: files, folders and patterns such as `'trials/*.mp4'`, with `-o` as an output folder. Folders skip earlier outputs (`*_flow.*`); a failing video doesn't stop the rest (#14).
@@ -19,6 +21,9 @@
 
 ### Fixed
 
+- **SEA-RAFT and NeuFlow v2 work.** Their setup step downloaded files that no longer exist, wrote into the installed package, and the models were wired up wrongly (wrong output, missing initialisation; NeuFlow's input was scaled twice, giving flow off by ~17 px on a 3 px shift). Their model code is now included at pinned upstream commits, with the fixes; on a known shift, SEA-RAFT is within 0.01 px and NeuFlow within 0.08 px (#16).
+- RAFT normalises its input as torchvision intends ([−1, 1], not [0, 1]) and pads by repeating edges (#16).
+- Very small frames (under 128 px) no longer crash the deep methods.
 - Lucas-Kanade output was almost entirely black, with every style: its tracked points are now drawn as dots or arrows (#15).
 - Quiver arrows were drawn at their true length, so ordinary motion of a few pixels was invisible; they're now scaled to the grid, averaged over each cell, and left out where nothing moves (#15).
 - `-o` pointing at the input no longer destroys the input; motionflow refuses (#10).
@@ -33,6 +38,7 @@
 
 ### Changed
 
+- Weights download on first use without asking, like PyTorch's and torchvision's; the interactive prompts, which broke batch jobs, are gone. The `motionflow setup-vendors` step is gone too (#16).
 - **The default method is DIS** instead of Farneback (#20). Use `--method farneback` for results like motionflow 0.1's; `process_video` keeps Farneback.
 - The command line prints output paths on stdout, one per line, and everything else on stderr, so `out=$(motionflow video.mp4)` works. Progress bars only appear in an interactive terminal, so batch-job logs stay clean. Exit status 1 means a video failed, 2 a usage error, 130 Ctrl-C (#14).
 - Options that have no effect with the other options given (such as `--quiver-step` without `--viz quiver`) are reported instead of silently ignored (#14).

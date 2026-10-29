@@ -1,1 +1,1 @@
-# Populated by: python -m motionflow.methods._vendor_setup
+"""Third-party model code, vendored at pinned commits. See README.md."""

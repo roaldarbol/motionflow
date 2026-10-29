@@ -71,8 +71,8 @@ vis  = flow_to_hsv(flow)                         # BGR image
 | `tvl1` | Dense | No | Sharp edges, slow |
 | `lucas-kanade` | Sparse | No | Tracks points; drawn as dots or arrows |
 | `raft` | Dense | Yes | High quality; weights auto-downloaded |
-| `sea-raft` | Dense | Yes | ECCV 2024; not working in this release ([#16](https://github.com/roaldarbol/motionflow/issues/16)) |
-| `neuflow` | Dense | Yes | Edge-optimised; not working in this release ([#16](https://github.com/roaldarbol/motionflow/issues/16)) |
+| `sea-raft` | Dense | Yes | ECCV 2024; the most accurate |
+| `neuflow` | Dense | Yes | The fastest deep method |
 
 ## Documentation
 

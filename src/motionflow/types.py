@@ -45,7 +45,8 @@ class NormalizeMode(str, Enum):
 
 
 class ModelSize(str, Enum):
-    """Model size for deep learning methods."""
+    """Model size for deep learning methods (RAFT: small, large; SEA-RAFT: all three)."""
 
     SMALL = "small"
+    MEDIUM = "medium"
     LARGE = "large"

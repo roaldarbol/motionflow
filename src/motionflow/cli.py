@@ -384,31 +384,118 @@ def flow_command(
 # ---------------------------------------------------------------------------
 
 
+# Weight files each deep method needs (RAFT's come from torchvision).
+DEEP_WEIGHTS = {
+    Method.SEA_RAFT: {
+        "small": "sea-raft-small",
+        "medium": "sea-raft-medium",
+        "large": "sea-raft-medium",
+    },
+    Method.NEUFLOW: {"large": "neuflow-v2"},
+}
+
+
+def _torchvision_raft_cached(size: str) -> bool:
+    import os
+
+    hub = Path(os.environ.get("TORCH_HOME", Path.home() / ".cache" / "torch")) / "hub"
+    return any((hub / "checkpoints").glob(f"raft_{size}_*.pth"))
+
+
 @app.command("methods")
 def methods_command() -> None:
     """List the optical flow methods and whether they can run here."""
     import cv2
 
+    from motionflow import weights
+
     torch = importlib.util.find_spec("torch") is not None
     contrib = hasattr(cv2, "optflow")
+
+    def deep(method: Method) -> tuple[bool, str]:
+        if not torch:
+            return False, "needs torch"
+        if method == Method.RAFT:
+            cached = all(_torchvision_raft_cached(s) for s in ("small", "large"))
+        else:
+            cached = all(weights.is_cached(n) for n in set(DEEP_WEIGHTS[method].values()))
+        return True, "" if cached else "weights download on first use"
+
     rows = [
         (Method.DIS, "dense", "fast and accurate; the default", True, ""),
         (Method.FARNEBACK, "dense", "the default before 0.2", True, ""),
-        (Method.TVL1, "dense", "sharp motion edges; slow", contrib, "needs OpenCV contrib"),
+        (
+            Method.TVL1,
+            "dense",
+            "sharp motion edges; slow",
+            contrib,
+            "" if contrib else "needs OpenCV contrib",
+        ),
         (Method.LUCAS_KANADE, "points", "tracks points; drawn as dots or arrows", True, ""),
-        (Method.RAFT, "dense, deep", "high quality; GPU recommended", torch, "needs torch"),
-        (Method.SEA_RAFT, "dense, deep", "not working in this release (#16)", False, "#16"),
-        (Method.NEUFLOW, "dense, deep", "not working in this release (#16)", False, "#16"),
+        (Method.RAFT, "dense, deep", "small, large", *deep(Method.RAFT)),
+        (
+            Method.SEA_RAFT,
+            "dense, deep",
+            "small, medium, large; very accurate",
+            *deep(Method.SEA_RAFT),
+        ),
+        (Method.NEUFLOW, "dense, deep", "fastest deep method", *deep(Method.NEUFLOW)),
     ]
     table = Table(box=None, pad_edge=False)
     for column in ("Method", "Kind", "Notes", "Available"):
         table.add_column(column)
-    for method, kind, notes, ok, missing in rows:
-        status = "[green]yes[/green]" if ok else f"[red]no[/red] [dim]({escape(missing)})[/dim]"
+    for method, kind, notes, ok, extra in rows:
+        if ok:
+            status = "[green]yes[/green]" + (f" [dim]({escape(extra)})[/dim]" if extra else "")
+        else:
+            status = f"[red]no[/red] [dim]({escape(extra)})[/dim]"
         table.add_row(method.value, kind, escape(notes), status)
     Console().print(table)
     if not torch:
         Console().print(escape('\nDeep methods need PyTorch: pip install "motionflow[torch]"'))
+
+
+@app.command("download")
+def download_command(
+    methods: Annotated[
+        list[Method] | None,
+        typer.Argument(
+            help="Deep methods to fetch weights for: raft, sea-raft, neuflow. [default: all]",
+            show_default=False,
+        ),
+    ] = None,
+) -> None:
+    """Download model weights now, e.g. on a login node before a batch job.
+
+    Weights otherwise download on first use.
+    """
+    from motionflow import weights
+
+    chosen = methods or [Method.RAFT, Method.SEA_RAFT, Method.NEUFLOW]
+    for method in chosen:
+        if not method.requires_torch:
+            console.print(f"{method.value} needs no weights.")
+            continue
+        if method == Method.RAFT:
+            try:
+                from torchvision.models import optical_flow as of
+            except ImportError:
+                console.print(
+                    "[red]Error:[/red] "
+                    + escape('RAFT needs torch: pip install "motionflow[torch]"')
+                )
+                raise typer.Exit(code=1) from None
+            for size_weights in (of.Raft_Small_Weights.DEFAULT, of.Raft_Large_Weights.DEFAULT):
+                size_weights.get_state_dict(progress=True)
+            console.print("[green]Cached:[/green] raft (small, large)")
+            continue
+        for name in sorted(set(DEEP_WEIGHTS[method].values())):
+            try:
+                path = weights.fetch(name)
+            except RuntimeError as exc:
+                console.print(f"[red]Error:[/red] {escape(str(exc))}")
+                raise typer.Exit(code=1) from None
+            console.print(f"[green]Cached:[/green] {name} [dim]({escape(str(path))})[/dim]")
 
 
 # ---------------------------------------------------------------------------

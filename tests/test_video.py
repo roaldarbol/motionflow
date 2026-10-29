@@ -133,6 +133,25 @@ class TestVideoReader:
         if count is not None:
             assert count == 3
 
+    def test_seek_failure_falls_back_to_decoding(self, tmp_path, monkeypatch):
+        # Some files refuse to seek, after moving the read position: the
+        # reader must reopen and decode from the start, not carry on mid-file.
+        import itertools
+
+        import av
+
+        def failing_seek(self, target):
+            for _ in itertools.islice(self._decoded, 120):  # move on, like a failed seek
+                pass
+            raise av.error.PermissionError(1, "Operation not permitted")
+
+        monkeypatch.setattr(VideoReader, "_seek", failing_seek)
+        path = write_video(tmp_path / "clip.mp4", n=200)  # 8 s at 25 fps
+        with VideoReader(path, start=6.0, end="153f") as reader:
+            frames = list(reader.frames())
+        assert [frame_id(f.image) for f in frames] == [150, 151, 152]
+        assert [f.index for f in frames] == [150, 151, 152]
+
     def test_start_past_end(self, tmp_path):
         path = write_video(tmp_path / "clip.mp4", n=5)
         with pytest.raises(OSError, match="No frames"):
