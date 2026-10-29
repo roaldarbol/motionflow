@@ -6,10 +6,11 @@ event when it gets brighter, an OFF event when it gets darker. This module
 simulates that from video: every pixel keeps a reference log brightness and
 emits one event per threshold crossed between frames.
 
-This is the core model (Lichtsteiner et al. 2008; as in ESIM and v2e). It
-assumes an ideal sensor: no noise, no threshold mismatch between pixels, no
-bandwidth limit or refractory period. Events between two frames get
-timestamps spread linearly across the interval.
+By default the sensor is ideal (Lichtsteiner et al. 2008; as in ESIM and
+v2e): identical, noiseless pixels. The realistic effects of v2e can be
+added: threshold mismatch between pixels, limited photoreceptor bandwidth,
+leak events, shot noise and a refractory period; and in-between frames
+along optical flow, so fast motion fires along its path at the right times.
 
 The output is a video of the events, and optionally the event stream itself
 as ``(t, x, y, p)`` records.
@@ -153,6 +154,128 @@ class EventWriter:
 
 
 # ---------------------------------------------------------------------------
+# Sensor model
+# ---------------------------------------------------------------------------
+
+Sensor = Literal["ideal", "clean", "noisy"]
+Interpolate = Literal["none", "flow"]
+
+# The non-ideal effects of each sensor preset; v2e's "clean" and "noisy".
+SENSORS: dict[str, dict[str, float]] = {
+    "ideal": {
+        "threshold_sigma": 0.0,
+        "cutoff_hz": 0.0,
+        "leak_rate_hz": 0.0,
+        "shot_noise_rate_hz": 0.0,
+        "refractory": 0.0,
+    },
+    "clean": {
+        "threshold_sigma": 0.02,
+        "cutoff_hz": 0.0,
+        "leak_rate_hz": 0.0,
+        "shot_noise_rate_hz": 0.0,
+        "refractory": 0.0,
+    },
+    "noisy": {
+        "threshold_sigma": 0.05,
+        "cutoff_hz": 30.0,
+        "leak_rate_hz": 0.1,
+        "shot_noise_rate_hz": 5.0,
+        "refractory": 0.0,
+    },
+}
+
+# v2e's constants: spread of leak rates between pixels (decades), jitter of
+# the leak, and how much shot noise falls off with intensity.
+_NOISE_RATE_DECADES = 0.1
+_LEAK_JITTER = 0.1
+_SHOT_NOISE_INTENSITY_FACTOR = 0.25
+
+
+def lin_log(gray: np.ndarray, linear_below: float = 20.0) -> np.ndarray:
+    """Photoreceptor response: linear below ``linear_below`` (0-255), log above.
+
+    As in v2e: the slope of the linear part meets the log at the transition,
+    so dark pixels respond in proportion to brightness instead of having their
+    noise amplified by the log.
+    """
+    x = gray.astype(np.float32)
+    slope = np.log(linear_below) / linear_below
+    return np.where(x <= linear_below, x * slope, np.log(np.maximum(x, linear_below)))
+
+
+class _PixelState:
+    """Everything the simulated sensor remembers between steps."""
+
+    def __init__(self, shape: tuple[int, int], camera: EventCamera, first: np.ndarray) -> None:
+        rng = camera._rng
+        self.photoreceptor = first.copy()  # low-pass filtered log brightness
+        self.reference = first.copy()  # the level the last event left
+        self.last_event = np.full(shape, -np.inf, np.float64)
+        if camera.threshold_sigma > 0:
+            noise_on = rng.normal(0.0, camera.threshold_sigma, shape)
+            noise_off = rng.normal(0.0, camera.threshold_sigma, shape)
+            self.on_threshold = np.maximum(camera.on_threshold + noise_on, 0.01).astype(np.float32)
+            self.off_threshold = np.maximum(camera.off_threshold + noise_off, 0.01).astype(
+                np.float32
+            )
+        else:
+            self.on_threshold = np.full(shape, camera.on_threshold, np.float32)
+            self.off_threshold = np.full(shape, camera.off_threshold, np.float32)
+        # Leak and shot noise vary between pixels (log-normally).
+        self.noise_rate = np.exp(np.log(10) * _NOISE_RATE_DECADES * rng.standard_normal(shape))
+
+
+# ---------------------------------------------------------------------------
+# In-between frames along optical flow
+# ---------------------------------------------------------------------------
+
+
+class _FlowInterpolator:
+    """Interpolates frames along optical flow, in both directions.
+
+    v2e uses a neural network (SuperSloMo) for this; motionflow uses its own
+    optical flow. A frame at fraction ``a`` of the interval is the blend of
+    the first frame moved ``a`` of the way forward and the second moved
+    ``1 - a`` of the way back. Occlusions aren't modelled.
+    """
+
+    def __init__(self, method: str, max_steps: int, steps: int | None) -> None:
+        from motionflow.methods import make_estimator
+
+        self.estimator = make_estimator(method)
+        self.max_steps = max_steps
+        self.steps = steps
+
+    def __call__(
+        self, prev: np.ndarray, curr: np.ndarray, prev_gray: np.ndarray, curr_gray: np.ndarray
+    ) -> list[np.ndarray]:
+        """Grey frames at fractions 1/K, 2/K, ..., 1 of the interval (the last is ``curr``)."""
+        forward = self.estimator(prev, curr)
+        steps = self.steps
+        if steps is None:
+            # About a pixel of motion per step.
+            speed = float(np.percentile(np.hypot(forward[..., 0], forward[..., 1]), 99.9))
+            steps = int(np.clip(np.ceil(speed), 1, self.max_steps))
+        if steps == 1:
+            return [curr_gray.astype(np.float32)]
+        backward = self.estimator(curr, prev)
+        h, w = prev_gray.shape
+        xs, ys = np.meshgrid(np.arange(w, dtype=np.float32), np.arange(h, dtype=np.float32))
+        a_img, b_img = prev_gray.astype(np.float32), curr_gray.astype(np.float32)
+        frames = []
+        for k in range(1, steps):
+            a = k / steps
+            from_a = cv2.remap(a_img, xs - a * forward[..., 0], ys - a * forward[..., 1],
+                               cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)  # fmt: skip
+            from_b = cv2.remap(b_img, xs - (1 - a) * backward[..., 0], ys - (1 - a) * backward[..., 1],
+                               cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)  # fmt: skip
+            frames.append((1 - a) * from_a + a * from_b)
+        frames.append(b_img)
+        return frames
+
+
+# ---------------------------------------------------------------------------
 # The simulator
 # ---------------------------------------------------------------------------
 
@@ -160,35 +283,63 @@ class EventWriter:
 class EventCamera(Transform):
     """Simulates an event camera (DVS) and draws its events.
 
+    Every pixel keeps a reference brightness; when its (photoreceptor)
+    brightness moves more than a contrast threshold from it, the pixel emits
+    one event per threshold crossed (ON brighter, OFF darker) and moves its
+    reference by as many thresholds. Brightness is linear below
+    ``linear_below`` and logarithmic above, as in a real photoreceptor.
+
+    ``sensor`` picks how realistic the sensor is, after v2e: ``"ideal"``
+    (identical, noiseless pixels), ``"clean"`` (thresholds vary slightly
+    between pixels) or ``"noisy"`` (also a 30 Hz bandwidth limit, leak events
+    and shot noise). Any of the effects can also be set on its own.
+
     Args:
         threshold: Contrast threshold for ON and OFF events, as a change in
-            log brightness (0.2 is about a 22% change). Lower gives more
-            events, including from noise.
+            log brightness (0.2 is about a 22% change).
         on_threshold: Threshold for ON events, overriding ``threshold``.
         off_threshold: Threshold for OFF events, overriding ``threshold``.
-        log_offset: Added to brightness (0-255) before taking the log, so
-            that dark pixels don't fire on noise.
+        sensor: ``"ideal"``, ``"clean"`` or ``"noisy"``; sets the defaults
+            of the five effects below.
+        threshold_sigma: Pixel-to-pixel spread of the thresholds (standard
+            deviation, log units).
+        cutoff_hz: Photoreceptor bandwidth at full brightness; darker pixels
+            respond more slowly, smearing motion as real sensors do. 0 means
+            unlimited.
+        leak_rate_hz: Rate at which each reference drifts down by one
+            threshold, producing occasional ON events in still scenes.
+        shot_noise_rate_hz: Rate of random ON and OFF events per pixel.
+        refractory: Seconds after an event during which a pixel can't fire.
+        seed: Random seed for the threshold spread and noise.
+        linear_below: Brightness (0-255) below which the response is linear.
+        interpolate: ``"flow"`` makes in-between frames along optical flow,
+            so fast motion fires along its whole path at the right times
+            rather than only where it starts and ends. ``"none"`` uses the
+            frames as they are.
+        upsample: In-between steps per frame interval with
+            ``interpolate="flow"``; ``None`` chooses per interval, about one
+            pixel of motion per step, up to ``max_upsample``.
+        max_upsample: Most in-between steps when ``upsample`` is ``None``.
+        flow_method: Optical flow method for the interpolation.
         render: ``"polarity"``: ON events blue, OFF red, on black.
             ``"count"``: the number of events per pixel as a heatmap.
         window: Draw the events of the last ``window`` frames together.
-            Event cameras are often shown this way, as frames of a few
-            milliseconds; at high frame rates a window of several frames
-            makes motion easier to see.
-        overlay: Draw the events over the greyscale original at this
-            opacity, instead of on black.
-        full_count: For ``render="count"``: the event count drawn at full
-            strength.
+        overlay: Draw the events over the greyscale original at this opacity.
+        full_count: Events per pixel drawn at full strength.
         save_events: Also write the event stream to this file (``.h5``,
             ``.npz`` or ``.txt``; see :class:`EventWriter`).
         overwrite: Replace ``save_events`` if it exists.
 
-    The first frame only sets the reference, so it has no events.
+    The first frame only sets the references, so it has no events. After
+    processing, ``frame_counts`` holds the (ON, OFF) totals of each frame and
+    ``total_events`` their sum.
 
     References: Lichtsteiner, Posch & Delbruck, "A 128x128 120 dB 15 µs
     latency asynchronous temporal contrast vision sensor", IEEE JSSC 2008.
     Rebecq, Gehrig & Scaramuzza, "ESIM: an open event camera simulator",
     CoRL 2018. Hu, Liu & Delbruck, "v2e: From video frames to realistic DVS
-    events", CVPR Workshops 2021.
+    events", CVPR Workshops 2021, whose sensor model this follows
+    (github.com/SensorsINI/v2e, MIT licence).
     """
 
     name = "events"
@@ -199,7 +350,18 @@ class EventCamera(Transform):
         *,
         on_threshold: float | None = None,
         off_threshold: float | None = None,
-        log_offset: float = 10.0,
+        sensor: Sensor = "ideal",
+        threshold_sigma: float | None = None,
+        cutoff_hz: float | None = None,
+        leak_rate_hz: float | None = None,
+        shot_noise_rate_hz: float | None = None,
+        refractory: float | None = None,
+        seed: int = 0,
+        linear_below: float = 20.0,
+        interpolate: Interpolate = "none",
+        upsample: int | None = None,
+        max_upsample: int = 16,
+        flow_method: str = "dis",
         render: Render = "polarity",
         window: int = 1,
         overlay: float | None = None,
@@ -215,8 +377,30 @@ class EventCamera(Transform):
         ):
             if value <= 0:
                 raise ValueError(f"{name} must be positive, got {value}")
-        if log_offset <= 0:
-            raise ValueError(f"log_offset must be positive, got {log_offset}")
+        if sensor not in SENSORS:
+            raise ValueError(f"sensor must be one of {', '.join(SENSORS)}, got {sensor!r}")
+        preset = SENSORS[sensor]
+        given = {
+            "threshold_sigma": threshold_sigma,
+            "cutoff_hz": cutoff_hz,
+            "leak_rate_hz": leak_rate_hz,
+            "shot_noise_rate_hz": shot_noise_rate_hz,
+            "refractory": refractory,
+        }
+        for name, value in given.items():
+            value = preset[name] if value is None else value
+            if value < 0:
+                raise ValueError(f"{name} must be 0 or more, got {value}")
+            setattr(self, name, float(value))
+        self.sensor = sensor
+        if linear_below <= 1:
+            raise ValueError(f"linear_below must be more than 1, got {linear_below}")
+        if interpolate not in ("none", "flow"):
+            raise ValueError(f"interpolate must be 'none' or 'flow', got {interpolate!r}")
+        if upsample is not None and upsample < 1:
+            raise ValueError(f"upsample must be at least 1, got {upsample}")
+        if max_upsample < 1:
+            raise ValueError(f"max_upsample must be at least 1, got {max_upsample}")
         if render not in ("polarity", "count"):
             raise ValueError(f"render must be 'polarity' or 'count', got {render!r}")
         if window < 1:
@@ -227,7 +411,12 @@ class EventCamera(Transform):
             raise ValueError(f"full_count must be at least 1, got {full_count}")
         if save_events is not None and Path(save_events).suffix.lower() not in EVENT_FORMATS:
             raise ValueError(f"save_events must end in one of {', '.join(EVENT_FORMATS)}")
-        self.log_offset = log_offset
+        self.seed = seed
+        self.linear_below = linear_below
+        self.interpolate = interpolate
+        self.upsample = upsample
+        self.max_upsample = max_upsample
+        self.flow_method = flow_method
         self.render = render
         self.window = window
         self.overlay = overlay
@@ -235,33 +424,56 @@ class EventCamera(Transform):
         self.save_events = Path(save_events) if save_events is not None else None
         self.overwrite = overwrite
         self.total_events = 0
+        self.frame_counts: list[tuple[int, int]] = []  # (ON, OFF) per frame
+        self.steps_used: list[int] = []
+
+    # -- the loop -------------------------------------------------------------
 
     def process(self, frames: Iterable[Frame]) -> Iterator[np.ndarray]:
+        self._rng = np.random.default_rng(self.seed)
+        interpolator = (
+            _FlowInterpolator(self.flow_method, self.max_upsample, self.upsample)
+            if self.interpolate == "flow"
+            else None
+        )
         writer: EventWriter | None = None
-        reference: np.ndarray | None = None
-        previous_time = 0.0
+        state: _PixelState | None = None
+        previous: Frame | None = None
+        previous_gray: np.ndarray | None = None
         recent: deque[tuple[np.ndarray, np.ndarray]] = deque(maxlen=self.window)
         self.total_events = 0
+        self.frame_counts = []
+        self.steps_used = []
         try:
             for frame in frames:
                 gray = cv2.cvtColor(frame.image, cv2.COLOR_BGR2GRAY)
-                log = np.log(gray.astype(np.float32) + self.log_offset)
-                if reference is None:
-                    reference = log
-                    previous_time = frame.time
+                on = np.zeros(gray.shape, np.int32)
+                off = np.zeros(gray.shape, np.int32)
+                if state is None:
+                    state = _PixelState(gray.shape, self, lin_log(gray, self.linear_below))
                     if self.save_events is not None:
-                        h, w = gray.shape
-                        writer = EventWriter(self.save_events, w, h, self.overwrite)
-                    on = off = np.zeros(gray.shape, np.int32)
-                else:
-                    on, off, reference = self._fire(log, reference)
-                    if writer is not None:
-                        writer.write(
-                            *self._events(on, off, log, reference, previous_time, frame.time)
+                        writer = EventWriter(
+                            self.save_events, gray.shape[1], gray.shape[0], self.overwrite
                         )
-                    previous_time = frame.time
-                self.total_events += int(on.sum() + off.sum())
+                else:
+                    assert previous is not None and previous_gray is not None
+                    if interpolator is not None:
+                        steps = interpolator(previous.image, frame.image, previous_gray, gray)
+                    else:
+                        steps = [gray.astype(np.float32)]
+                    self.steps_used.append(len(steps))
+                    dt = (frame.time - previous.time) / len(steps)
+                    for k, step_gray in enumerate(steps):
+                        t0 = previous.time + k * dt
+                        events = self._step(state, step_gray, t0, t0 + dt)
+                        on += events.on_count
+                        off += events.off_count
+                        if writer is not None:
+                            writer.write(*events.stream)
+                self.frame_counts.append((int(on.sum()), int(off.sum())))
+                self.total_events += self.frame_counts[-1][0] + self.frame_counts[-1][1]
                 recent.append((on, off))
+                previous, previous_gray = frame, gray
                 yield self._draw(recent, gray)
         except BaseException:
             if writer is not None:
@@ -270,48 +482,51 @@ class EventCamera(Transform):
         if writer is not None:
             writer.close()
 
-    def _fire(
-        self, log: np.ndarray, reference: np.ndarray
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """Events per pixel since the last frame, and the updated reference."""
-        delta = log - reference
-        on = np.floor(np.maximum(delta, 0) / self.on_threshold).astype(np.int32)
-        off = np.floor(np.maximum(-delta, 0) / self.off_threshold).astype(np.int32)
-        reference = reference + on * self.on_threshold - off * self.off_threshold
-        return on, off, reference
+    def _step(self, state: _PixelState, gray: np.ndarray, t0: float, t1: float) -> _StepEvents:
+        """Advance the sensor from time t0 to t1, ending at brightness ``gray``."""
+        dt = t1 - t0
+        log = lin_log(gray, self.linear_below)
+        intensity = (gray.astype(np.float32) + 20) / 275  # v2e's 0-1 scale for rates
 
-    def _events(
-        self,
-        on: np.ndarray,
-        off: np.ndarray,
-        log: np.ndarray,
-        reference: np.ndarray,
-        t0: float,
-        t1: float,
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-        """The individual events, timestamps spread linearly over [t0, t1]."""
-        ts, xs, ys, ps = [], [], [], []
-        for counts, polarity, step in ((on, 1, self.on_threshold), (off, 0, self.off_threshold)):
-            y, x = np.nonzero(counts)
-            if len(x) == 0:
-                continue
-            n = counts[y, x]
-            # Where the threshold was crossed, as a fraction of the change.
-            change = np.abs(log[y, x] - reference[y, x]) + n * step
-            # Crossing number 1..n for each pixel's events, without a Python loop.
-            total = int(n.sum())
-            k = np.arange(total) - np.repeat(np.cumsum(n) - n, n) + 1
-            fraction = k * step / np.repeat(change, n)
-            ts.append(t0 + (t1 - t0) * fraction)
-            xs.append(np.repeat(x, n))
-            ys.append(np.repeat(y, n))
-            ps.append(np.full(total, polarity, np.uint8))
-        if not ts:
-            empty = np.zeros(0)
-            return empty, empty, empty, empty
-        t, x, y, p = (np.concatenate(a) for a in (ts, xs, ys, ps))
-        order = np.argsort(t, kind="stable")
-        return t[order], x[order], y[order], p[order]
+        # Photoreceptor: first-order low-pass, faster when brighter.
+        if self.cutoff_hz > 0 and dt > 0:
+            tau = 1 / (2 * np.pi * self.cutoff_hz)
+            eps = np.minimum(intensity * (dt / tau), 1.0)
+            state.photoreceptor += eps * (log - state.photoreceptor)
+        else:
+            state.photoreceptor = log
+
+        # Leak: the reference drifts down, so pixels slowly fire ON events.
+        if self.leak_rate_hz > 0 and dt > 0:
+            jitter = 1 - _LEAK_JITTER * self._rng.standard_normal(log.shape)
+            rate = self.leak_rate_hz * state.noise_rate * jitter
+            state.reference -= (dt * rate * state.on_threshold).astype(np.float32)
+
+        diff = state.photoreceptor - state.reference
+        on = np.floor(np.maximum(diff, 0) / state.on_threshold).astype(np.int32)
+        off = np.floor(np.maximum(-diff, 0) / state.off_threshold).astype(np.int32)
+        stream = _crossings(on, off, diff, state, t0, t1, self.refractory)
+        on_allowed, off_allowed = stream.on_count, stream.off_count
+        state.reference += on_allowed * state.on_threshold - off_allowed * state.off_threshold
+
+        # Shot noise: random events, more where thresholds are low.
+        if self.shot_noise_rate_hz > 0 and dt > 0:
+            factor = (
+                (self.shot_noise_rate_hz / 2)
+                * dt
+                * ((_SHOT_NOISE_INTENSITY_FACTOR - 1) * intensity + 1)
+            )
+            draw = self._rng.random(log.shape)
+            shot_on = draw > 1 - factor * (self.on_threshold / state.on_threshold)
+            shot_off = draw < factor * (self.off_threshold / state.off_threshold)
+            # A noise event resets the pixel, as in v2e.
+            state.reference[shot_on] = state.photoreceptor[shot_on]
+            state.reference[shot_off] = state.photoreceptor[shot_off]
+            state.last_event[shot_on | shot_off] = t1
+            stream = stream.with_noise(shot_on, shot_off, t1)
+        return stream
+
+    # -- drawing ----------------------------------------------------------------
 
     def _draw(self, recent: deque[tuple[np.ndarray, np.ndarray]], gray: np.ndarray) -> np.ndarray:
         on = np.sum([o for o, _ in recent], axis=0) if len(recent) > 1 else recent[0][0]
@@ -333,6 +548,88 @@ class EventCamera(Transform):
         return image
 
 
+class _StepEvents:
+    """The events of one step: counts per pixel, and the stream (t, x, y, p)."""
+
+    def __init__(self, on_count, off_count, t, x, y, p) -> None:
+        self.on_count, self.off_count = on_count, off_count
+        self.stream = (t, x, y, p)
+
+    def with_noise(self, shot_on: np.ndarray, shot_off: np.ndarray, t: float) -> _StepEvents:
+        parts = [self.stream]
+        for mask, polarity in ((shot_on, 1), (shot_off, 0)):
+            y, x = np.nonzero(mask)
+            parts.append((np.full(len(x), t), x, y, np.full(len(x), polarity, np.uint8)))
+        t_, x_, y_, p_ = (np.concatenate([part[i] for part in parts]) for i in range(4))
+        order = np.argsort(t_, kind="stable")
+        return _StepEvents(
+            self.on_count + shot_on, self.off_count + shot_off,
+            t_[order], x_[order], y_[order], p_[order],
+        )  # fmt: skip
+
+
+def _crossings(
+    on: np.ndarray,
+    off: np.ndarray,
+    diff: np.ndarray,
+    state: _PixelState,
+    t0: float,
+    t1: float,
+    refractory: float,
+) -> _StepEvents:
+    """The individual events of one step, with timestamps and the refractory period.
+
+    Brightness is taken to change linearly over [t0, t1], so the k-th of n
+    crossings in a pixel happens at t0 + (t1 - t0) * k * threshold / |diff|.
+    After an event a pixel can't fire for ``refractory`` seconds; crossings it
+    misses stay pending in its reference and fire later.
+    """
+    allowed = {1: np.zeros_like(on), 0: np.zeros_like(off)}
+    ts, xs, ys, ps = [], [], [], []
+    for counts, polarity, thresholds in (
+        (on, 1, state.on_threshold),
+        (off, 0, state.off_threshold),
+    ):
+        y, x = np.nonzero(counts)
+        if len(x) == 0:
+            continue
+        n = counts[y, x].astype(np.int64)
+        spacing = (t1 - t0) * thresholds[y, x] / np.maximum(np.abs(diff[y, x]), 1e-12)
+        if refractory > 0:
+            # First crossing after the pixel's refractory period ends, and every
+            # m-th one after that.
+            ready = state.last_event[y, x] + refractory
+            first = np.maximum(1, np.ceil((ready - t0) / spacing - 1e-9)).astype(np.int64)
+            every = np.maximum(1, np.ceil(refractory / spacing - 1e-9)).astype(np.int64)
+            count = np.where(first > n, 0, 1 + (n - first) // every)
+        else:
+            first = np.ones_like(n)
+            every = np.ones_like(n)
+            count = n
+        keep = count > 0
+        y, x, first, every, count, spacing = (a[keep] for a in (y, x, first, every, count, spacing))
+        if len(x) == 0:
+            continue
+        allowed[polarity][y, x] = count
+        total = int(count.sum())
+        j = np.arange(total) - np.repeat(np.cumsum(count) - count, count)  # 0..count-1
+        k = np.repeat(first, count) + j * np.repeat(every, count)
+        t = t0 + k * np.repeat(spacing, count)
+        ts.append(t)
+        xs.append(np.repeat(x, count))
+        ys.append(np.repeat(y, count))
+        ps.append(np.full(total, polarity, np.uint8))
+        last = first + (count - 1) * every
+        state.last_event[y, x] = np.maximum(state.last_event[y, x], t0 + last * spacing)
+    if not ts:
+        empty = np.zeros(0)
+        return _StepEvents(allowed[1], allowed[0], empty, empty.astype(np.int64),
+                           empty.astype(np.int64), empty.astype(np.uint8))  # fmt: skip
+    t, x, y, p = (np.concatenate(a) for a in (ts, xs, ys, ps))
+    order = np.argsort(t, kind="stable")
+    return _StepEvents(allowed[1], allowed[0], t[order], x[order], y[order], p[order])
+
+
 def events(
     input: Path | str,
     output: Path | str | None = None,
@@ -340,7 +637,16 @@ def events(
     threshold: float = 0.2,
     on_threshold: float | None = None,
     off_threshold: float | None = None,
-    log_offset: float = 10.0,
+    sensor: Sensor = "ideal",
+    threshold_sigma: float | None = None,
+    cutoff_hz: float | None = None,
+    leak_rate_hz: float | None = None,
+    shot_noise_rate_hz: float | None = None,
+    refractory: float | None = None,
+    seed: int = 0,
+    interpolate: Interpolate = "none",
+    upsample: int | None = None,
+    max_upsample: int = 16,
     render: Render = "polarity",
     window: int = 1,
     overlay: float | None = None,
@@ -359,8 +665,8 @@ def events(
     """Simulate an event camera on a video: write a video of its events.
 
     See :class:`EventCamera` for the options. With ``save_events``, the
-    event stream is written too; ``result.info["events"]`` is the number of
-    events.
+    event stream is written too. ``result.info`` has the number of events
+    and, with ``interpolate="flow"``, the average in-between steps used.
 
     Returns:
         A :class:`~motionflow.pipeline.Result`.
@@ -372,7 +678,16 @@ def events(
         threshold,
         on_threshold=on_threshold,
         off_threshold=off_threshold,
-        log_offset=log_offset,
+        sensor=sensor,
+        threshold_sigma=threshold_sigma,
+        cutoff_hz=cutoff_hz,
+        leak_rate_hz=leak_rate_hz,
+        shot_noise_rate_hz=shot_noise_rate_hz,
+        refractory=refractory,
+        seed=seed,
+        interpolate=interpolate,
+        upsample=upsample,
+        max_upsample=max_upsample,
         render=render,
         window=window,
         overlay=overlay,
@@ -389,5 +704,13 @@ def events(
         if camera.save_events.exists() and not overwrite:
             raise FileExistsError(f"Output already exists: {camera.save_events}")
     result = run(camera, input, output, io=io, progress=progress, on_progress=on_progress)
-    result.info.update({"events": camera.total_events, "events_file": camera.save_events})
+    steps = camera.steps_used
+    result.info.update(
+        {
+            "events": camera.total_events,
+            "events_file": camera.save_events,
+            "sensor": sensor,
+            "mean_steps": float(np.mean(steps)) if steps else 1.0,
+        }
+    )
     return result

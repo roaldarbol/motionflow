@@ -111,12 +111,17 @@ Plus the [input and output options](#input-and-output). The default output name 
 |--------|---------|-------------|
 | `--threshold FLOAT` | `0.2` | Contrast threshold: the change in log brightness per event (0.2 is about 22%). |
 | `--on-threshold`, `--off-threshold` | `--threshold` | Separate thresholds for ON (brighter) and OFF (darker) events. |
-| `--log-offset FLOAT` | `10` | Added to brightness (0–255) before the log; higher keeps noise in dark areas quiet. |
 | `--render` | `polarity` | `polarity` (ON blue, OFF red) or `count` (events per pixel as a heatmap). |
 | `--window INT` | `1` | Draw the events of the last N frames together. |
 | `--overlay FLOAT` | — | Draw the events over the greyscale video at this opacity. |
 | `--full-count INT` | `4` | Events per pixel drawn at full strength. |
 | `--save-events` | — | Also write the event stream next to each output: `h5`, `npz` or `txt`. |
+| `--sensor` | `ideal` | `ideal`, `clean` or `noisy`: v2e's sensor presets. See [Sensor realism](methods.md#sensor-realism). |
+| `--threshold-sigma`, `--cutoff-hz`, `--leak-rate`, `--shot-noise-rate`, `--refractory` | from `--sensor` | Each realistic effect on its own. |
+| `--seed INT` | `0` | Random seed for the threshold spread and noise. |
+| `--interpolate` | `none` | `flow`: in-between frames along optical flow, so fast motion fires along its path. |
+| `--upsample INT` | auto | `--interpolate flow`: in-between steps per frame (default: about a pixel of motion per step). |
+| `--max-upsample INT` | `16` | `--interpolate flow`: most in-between steps per frame. |
 
 Plus the [input and output options](#input-and-output). The default output name is `<input>_events.<ext>`; with `--save-events h5`, the stream goes in `<input>_events.h5`.
 
@@ -138,6 +143,12 @@ An event camera on a high-speed video, events of the last 8 frames per frame, wi
 
 ```bash
 motionflow events highspeed.mp4 --window 8 --save-events h5
+```
+
+The same with a realistic sensor and in-between frames along optical flow:
+
+```bash
+motionflow events highspeed.mp4 --sensor clean --interpolate flow
 ```
 
 Every video in a folder, results in another folder:
