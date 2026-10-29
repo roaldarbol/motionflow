@@ -20,10 +20,7 @@ Uses OpenCV's contrib modules, which motionflow installs.
 
 ### Lucas-Kanade (`lucas-kanade`)
 
-Sparse tracker — identifies Shi-Tomasi corners, tracks them across frames with pyramidal Lucas-Kanade, and returns a sparse flow field (zero everywhere except tracked points).
-
-!!! warning "Experimental"
-    The visualisations don't yet render sparse flow well: the output is currently close to empty with every style, including `--viz quiver` ([#15](https://github.com/roaldarbol/motionflow/issues/15)).
+Sparse tracker: tracks points from one frame to the next with pyramidal Lucas-Kanade. By default the points are Shi-Tomasi corners; in Python, `LucasKanadeFlow(points="grid", grid_step=16)` tracks a regular grid instead. The flow is zero except at the tracked points, which are drawn as dots (`hsv`, `heatmap`) or arrows (`quiver`).
 
 **Best for:** feature point tracking visualisation, sparse motion analysis.
 

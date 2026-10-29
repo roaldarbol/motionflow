@@ -4,6 +4,9 @@
 
 ### Added
 
+- A colour key in the corner of the output (`--legend`, on by default): a colour wheel for `hsv`, a colour bar for `heatmap`, a reference arrow for `quiver`, labelled with the speed at full strength (#15).
+- `--min-flow` hides motion slower than a threshold; `--percentile` sets which speed is full strength; `--quiver-scale` sets the arrow length (#15).
+- `LucasKanadeFlow(points="grid")` tracks a regular grid of points; `grid_step` was accepted but ignored before (#15).
 - `motionflow.flow()` replaces `process_video()` and returns a `Result` (output path, frame counts, frame rate, encoder, timing, and the normalisation used). `process_video()` still works but is deprecated (#12).
 - A pipeline for any per-frame method: subclass `FrameTransform` (or `Transform`) and pass it to `motionflow.run()`, which handles reading, writing, ranges, scaling, output naming and safety. `FlowTransform.flows()` yields the flow fields themselves (#12).
 - Everything needed for custom pipelines is importable from `motionflow` (#12).
@@ -12,6 +15,8 @@
 
 ### Fixed
 
+- Lucas-Kanade output was almost entirely black, with every style: its tracked points are now drawn as dots or arrows (#15).
+- Quiver arrows were drawn at their true length, so ordinary motion of a few pixels was invisible; they're now scaled to the grid, averaged over each cell, and left out where nothing moves (#15).
 - `-o` pointing at the input no longer destroys the input; motionflow refuses (#10).
 - A failed or interrupted run no longer leaves a partial or empty file that looks complete: output is written to a temporary file and moved into place at the end (#10).
 - MPEG-TS (`.ts`, `.MTS`) and raw H.264 (`.h264`) inputs work; they used to give an empty output while reporting success (#11).
@@ -24,6 +29,8 @@
 
 ### Changed
 
+- **Colours use one scale for the whole video by default** (`--normalize auto`): the 99th percentile of all motion, measured exactly on short videos and sampled on long ones. The old default, `per-frame`, stretched each frame to its own largest motion, so a still scene's noise looked like motion. `global` now uses the percentile too, rather than the single largest value, and the scale never drops below 1 px/frame (#15).
+- `--overlay` (the flow's opacity over the original frame) replaces `--blend` (the original's opacity) and `--viz blend` (#15). `process_video` still accepts `blend`.
 - **The output has one frame per input frame**, so it lines up with the input: output frame *i* shows the motion from input frame *i − 1* to *i*, and frame 0 shows none. It used to have one frame fewer (#12).
 - **`stride`** estimates flow between frames `stride` apart and divides it by `stride`, so magnitudes stay in pixels per frame; before, they grew with the stride. The output still has one frame per input frame (#12).
 - **`smooth`** averages over a window centred on each frame instead of the preceding frames, so smoothing no longer lags behind the motion. `smooth=1` is the same as 0 (#12).

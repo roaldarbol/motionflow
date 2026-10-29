@@ -110,3 +110,18 @@ def test_warnings_are_short(clip, tmp_path):
     assert result.exit_code == 0, text(result)
     assert "Warning: libx264 needs even frame dimensions" in text(result)
     assert "UserWarning" not in text(result)
+
+
+def test_rendering_options(clip, tmp_path):
+    out = tmp_path / "out.mp4"
+    result = runner.invoke(
+        app,
+        [str(clip), "-o", str(out), "--viz", "quiver", "--overlay", "0.5", "--no-legend",
+         "--normalize", "global", "--percentile", "95", "--min-flow", "0.2", "--quiver-scale", "4"],
+    )  # fmt: skip
+    assert result.exit_code == 0, text(result)
+
+
+def test_blend_option_is_gone(clip):
+    result = runner.invoke(app, [str(clip), "--blend", "0.4"])
+    assert result.exit_code == 2

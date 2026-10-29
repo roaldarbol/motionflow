@@ -10,7 +10,13 @@ class FlowEstimator(ABC):
 
     Subclasses must implement :meth:`estimate`. The estimator is also callable,
     delegating to :meth:`estimate`.
+
+    Attributes:
+        sparse: ``True`` for point trackers, whose flow is zero except at the
+            tracked points. Renderers then draw the points themselves.
     """
+
+    sparse: bool = False
 
     @abstractmethod
     def estimate(self, prev: np.ndarray, curr: np.ndarray) -> np.ndarray:

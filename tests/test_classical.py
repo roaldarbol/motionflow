@@ -105,3 +105,14 @@ class TestMakeEstimator:
         monkeypatch.setattr(motionflow.methods, "RAFTFlow", FakeRAFT)
         make_estimator(Method.RAFT, model_size=size)
         assert received["size"] == ModelSize(size).value
+
+
+class TestLucasKanadeGrid:
+    def test_tracks_grid_points(self, checkerboard_frame, shifted_frame):
+        flow = LucasKanadeFlow(points="grid", grid_step=20)(checkerboard_frame, shifted_frame)
+        tracked = np.count_nonzero(np.hypot(flow[..., 0], flow[..., 1]))
+        assert 0 < tracked <= (120 // 20) * (160 // 20)
+
+    def test_invalid_points(self):
+        with pytest.raises(ValueError, match="points"):
+            LucasKanadeFlow(points="random")

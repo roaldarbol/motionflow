@@ -26,8 +26,8 @@ motionflow recording.mp4
 # RAFT on GPU, heatmap style, every other frame
 motionflow recording.mp4 --method raft --device cuda --viz heatmap --stride 2
 
-# Show the original frame at 40% opacity over the flow, with temporal smoothing
-motionflow recording.mp4 --blend 0.4 --smooth 3
+# The flow over the original frame at 60% opacity, with temporal smoothing
+motionflow recording.mp4 --overlay 0.6 --smooth 3
 
 # Quiver arrow overlay
 motionflow recording.mp4 --viz quiver --quiver-step 24
@@ -62,7 +62,7 @@ vis  = flow_to_hsv(flow)                         # BGR image
 |--------|------|-----|-------|
 | `farneback` | Dense | No | Default, fast |
 | `tvl1` | Dense | No | Sharp edges, slow |
-| `lucas-kanade` | Sparse | No | Experimental: output is currently near-empty ([#15](https://github.com/roaldarbol/motionflow/issues/15)) |
+| `lucas-kanade` | Sparse | No | Tracks points; drawn as dots or arrows |
 | `raft` | Dense | Yes | High quality; weights auto-downloaded |
 | `sea-raft` | Dense | Yes | ECCV 2024; not working in this release ([#16](https://github.com/roaldarbol/motionflow/issues/16)) |
 | `neuflow` | Dense | Yes | Edge-optimised; not working in this release ([#16](https://github.com/roaldarbol/motionflow/issues/16)) |

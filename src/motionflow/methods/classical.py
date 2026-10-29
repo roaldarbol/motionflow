@@ -143,11 +143,14 @@ class TVL1Flow(FlowEstimator):
 class LucasKanadeFlow(FlowEstimator):
     """Sparse optical flow via Lucas-Kanade with pyramidal refinement.
 
-    Tracks a regular grid of Shi-Tomasi corners. Untracked pixels are set to
-    zero, producing a sparse flow field suited for quiver visualisation.
+    Tracks points from one frame to the next: Shi-Tomasi corners by default,
+    or a regular grid. The flow is zero except at the tracked points, which
+    the renderers draw as dots or arrows.
 
     Args:
-        grid_step: Spacing in pixels between candidate tracking points.
+        points: ``"corners"`` tracks up to ``max_corners`` Shi-Tomasi
+            corners; ``"grid"`` tracks points every ``grid_step`` pixels.
+        grid_step: Spacing in pixels between points when ``points="grid"``.
         max_corners: Maximum number of corners to detect per frame.
         quality_level: Minimum corner quality (0–1).
         min_distance: Minimum distance between corners in pixels.
@@ -155,8 +158,11 @@ class LucasKanadeFlow(FlowEstimator):
         max_level: Maximum pyramid level.
     """
 
+    sparse = True
+
     def __init__(
         self,
+        points: str = "corners",
         grid_step: int = 16,
         max_corners: int = 500,
         quality_level: float = 0.01,
@@ -164,6 +170,11 @@ class LucasKanadeFlow(FlowEstimator):
         win_size: tuple[int, int] = (21, 21),
         max_level: int = 3,
     ) -> None:
+        if points not in ("corners", "grid"):
+            raise ValueError(f"points must be 'corners' or 'grid', got {points!r}")
+        if grid_step < 1:
+            raise ValueError(f"grid_step must be at least 1, got {grid_step}")
+        self.points = points
         self.grid_step = grid_step
         self.max_corners = max_corners
         self.quality_level = quality_level
@@ -183,13 +194,18 @@ class LucasKanadeFlow(FlowEstimator):
 
         flow = np.zeros((h, w, 2), dtype=np.float32)
 
-        pts = cv2.goodFeaturesToTrack(
-            prev_gray,
-            maxCorners=self.max_corners,
-            qualityLevel=self.quality_level,
-            minDistance=self.min_distance,
-            blockSize=7,
-        )
+        if self.points == "grid":
+            step = self.grid_step
+            ys, xs = np.mgrid[step // 2 : h : step, step // 2 : w : step]
+            pts = np.stack([xs, ys], axis=-1).reshape(-1, 1, 2).astype(np.float32)
+        else:
+            pts = cv2.goodFeaturesToTrack(
+                prev_gray,
+                maxCorners=self.max_corners,
+                qualityLevel=self.quality_level,
+                minDistance=self.min_distance,
+                blockSize=7,
+            )
         if pts is None or len(pts) == 0:
             return flow
 
