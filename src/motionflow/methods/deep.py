@@ -164,16 +164,10 @@ class SEARaftFlow(FlowEstimator):
     """Dense optical flow via SEA-RAFT (Simple, Efficient, Accurate RAFT).
 
     SEA-RAFT is at least 2.3x faster than prior methods at comparable accuracy.
-    Architecture files are vendored locally; weights are downloaded from
-    HuggingFace and cached in ``~/.cache/motionflow/weights/``.
 
-    **First-time setup required** — run once before using this method:
-
-    .. code-block:: bash
-
-        motionflow setup-vendors
-
-    If weights are not cached locally, motionflow will prompt before downloading.
+    Warning:
+        Not working in this release: the model can't be loaded yet. It is
+        being reworked (https://github.com/roaldarbol/motionflow/issues/16).
 
     Reference: Wang et al., ECCV 2024 (Best Paper candidate).
     https://arxiv.org/abs/2405.14793
@@ -266,15 +260,9 @@ class NeuFlowV2Flow(FlowEstimator):
     NeuFlow v2 is optimised for efficiency, running 5–110x faster than
     heavyweight methods at comparable accuracy, originally targeting edge devices.
 
-    **First-time setup required** — run once before using this method:
-
-    .. code-block:: bash
-
-        motionflow setup-vendors
-
-    Weights are downloaded from GitHub releases and cached in
-    ``~/.cache/motionflow/weights/``. If not cached, motionflow will prompt
-    before downloading.
+    Warning:
+        Not working in this release: the model can't be loaded yet. It is
+        being reworked (https://github.com/roaldarbol/motionflow/issues/16).
 
     Reference: Zhang et al., 2024. https://arxiv.org/abs/2408.10161
 

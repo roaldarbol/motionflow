@@ -8,7 +8,7 @@ All CLI options are available as keyword arguments to `process_video`. This make
 from motionflow import process_video
 
 out = process_video("recording.mp4")
-print(out)  # Path("recording_flow.mp4")
+print(out)  # recording_flow.mp4
 ```
 
 ## In a Jupyter notebook
