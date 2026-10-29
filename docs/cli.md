@@ -10,7 +10,8 @@ motionflow VIDEO... [OPTIONS]          # short for: motionflow flow VIDEO...
 | Command | What it does |
 |---------|--------------|
 | `flow` | Optical flow: how fast, and in which direction, each pixel moves. The default. |
-| `methods` | List the optical flow methods and whether they can run here. |
+| `methods` | List the optical flow methods, whether they can run here, and whether their weights are cached. |
+| `download` | Download the deep methods' weights now (they otherwise download on first use). |
 
 `-h` / `--help` works on every command, and `-V` / `--version` prints the version. `python -m motionflow` is the same as `motionflow`.
 
@@ -51,7 +52,7 @@ Progress bars only appear in an interactive terminal, so logs from batch jobs (S
 | `--stride INT` | `1` | Estimate flow every N frames, between frames N apart, and show it until the next estimate. Magnitudes stay in pixels per frame. Faster; the first N frames show no motion. |
 | `--smooth INT` | `0` | Average the flow over a window of N frames centred on each frame, so smoothing doesn't lag behind the motion. |
 | `--device TEXT` | `auto` | Deep methods: `auto`, `cuda`, `mps` or `cpu`. |
-| `--model-size SIZE` | `large` | Deep methods: `small` or `large`. |
+| `--model-size SIZE` | `large` | Deep methods: `small` or `large`; SEA-RAFT also `medium`. |
 
 ### Drawing
 

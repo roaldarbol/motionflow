@@ -46,38 +46,31 @@ Sparse tracker: tracks points from one frame to the next with pyramidal Lucas-Ka
 
 ## Deep learning methods
 
-These require `torch` and `torchvision`. Install with `pip install "motionflow[torch]"`; see [Installation](installation.md) for choosing a PyTorch build.
+These need PyTorch: install with `pip install "motionflow[torch]"`, and see [Installation](installation.md) for choosing a PyTorch build. They run on a CPU, slowly (seconds per 720p frame), and much faster on an NVIDIA GPU (`--device cuda`) or Apple silicon (`--device mps`). Their weights download on first use; see [Model weights](installation.md#model-weights).
+
+On a known (+3, −2) px shift at 330×250, all three recover the motion to within a fraction of a pixel (mean endpoint error, from the test suite): SEA-RAFT 0.01 px, NeuFlow v2 0.08 px, RAFT large 0.08 px, RAFT small 0.2 px.
 
 ### RAFT (`raft`)
 
-Recurrent All-Pairs Field Transforms. The model that reset state-of-the-art benchmarks in 2020. Uses the torchvision implementation with pretrained weights downloaded on first use.
+Recurrent All-Pairs Field Transforms, the model that reset optical flow benchmarks in 2020. torchvision's implementation and weights.
 
-Available sizes: `small` (faster) and `large` (more accurate, default).
+Sizes: `small` (faster) and `large` (default). In Python, `RAFTFlow(iters=12)` sets the number of refinement iterations.
 
-!!! warning
-    `--model-size small` is currently ignored on the command line, so RAFT always uses the large model there ([#11](https://github.com/roaldarbol/motionflow/issues/11)). The Python API's `model_size="small"` works.
-
-**Best for:** high-quality flow on scenes with complex or large motion.
-
-**Reference:** Teed & Deng, ECCV 2020. [arXiv:2003.12039](https://arxiv.org/abs/2003.12039)
+**Reference:** Teed & Deng, "RAFT: Recurrent All-Pairs Field Transforms for Optical Flow", ECCV 2020. [arXiv:2003.12039](https://arxiv.org/abs/2003.12039)
 
 ### SEA-RAFT (`sea-raft`)
 
-Simple, Efficient, Accurate RAFT — ECCV 2024 Best Paper candidate. At least 2.3× faster than prior methods at competitive accuracy. Weights loaded from HuggingFace.
+Simple, Efficient, Accurate RAFT: a simplified RAFT that is faster and more accurate. The most accurate method in our tests.
 
-!!! warning "Not working in this release"
-    SEA-RAFT can't be loaded yet. It is being reworked, likely on top of [ptlflow](https://github.com/hmorimitsu/ptlflow) ([#16](https://github.com/roaldarbol/motionflow/issues/16)).
+Sizes: `small`, `medium` (4 refinement iterations), and `large` (the medium model with 12 iterations, as in the paper). The command line's default size, `large`, is the most accurate; `--model-size small` is about 1.7× faster. The weights were trained on several datasets including Spring, a high-resolution benchmark of natural scenes.
 
-**Reference:** Wang et al., ECCV 2024. [arXiv:2405.14793](https://arxiv.org/abs/2405.14793)
+**Reference:** Wang, Lipson & Deng, "SEA-RAFT: Simple, Efficient, Accurate RAFT for Optical Flow", ECCV 2024. [arXiv:2405.14793](https://arxiv.org/abs/2405.14793)
 
 ### NeuFlow v2 (`neuflow`)
 
-Edge-optimised architecture running 5–110× faster than heavyweight models at comparable accuracy. Designed for deployment on resource-constrained hardware.
+A compact model designed for speed on small devices: the fastest deep method here. On an NVIDIA GPU it runs in half precision (float16), as its authors do.
 
-!!! warning "Not working in this release"
-    NeuFlow v2 can't be loaded yet. It is being reworked, likely on top of [ptlflow](https://github.com/hmorimitsu/ptlflow) ([#16](https://github.com/roaldarbol/motionflow/issues/16)).
-
-**Reference:** Zhang et al., 2024. [arXiv:2408.10161](https://arxiv.org/abs/2408.10161)
+**Reference:** Zhang, Gu, Taylor & Wang, "NeuFlow v2: High-Efficiency Optical Flow Estimation on Edge Devices", 2024. [arXiv:2408.10161](https://arxiv.org/abs/2408.10161)
 
 ## Choosing a method
 

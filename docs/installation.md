@@ -27,8 +27,26 @@ pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
 pip install motionflow
 ```
 
-!!! note "Deep methods in this release"
-    RAFT works. SEA-RAFT and NeuFlow v2 don't work in this release; they are being reworked ([#16](https://github.com/roaldarbol/motionflow/issues/16)).
+## Model weights
+
+The deep methods download their weights the first time they're used, with a progress bar, and check each file against a checksum:
+
+| Method | Size | From |
+|---|---|---|
+| `raft` | 4 MB (small), 21 MB (large) | torchvision, into PyTorch's cache (`~/.cache/torch`) |
+| `sea-raft` | 36 MB (small), 79 MB (medium, large) | GitHub ([ptlflow](https://github.com/hmorimitsu/ptlflow)'s mirror of the authors' weights) |
+| `neuflow` | 36 MB | GitHub ([the authors' repository](https://github.com/neufieldrobotics/NeuFlow_v2)) |
+
+SEA-RAFT's and NeuFlow v2's weights go to `~/.cache/motionflow/weights`; set `MOTIONFLOW_CACHE_DIR` to put the cache somewhere else. To download everything ahead of time, for example on a cluster's login node before a batch job on nodes without internet:
+
+```bash
+motionflow download              # all deep methods
+motionflow download sea-raft     # just one
+```
+
+`motionflow methods` shows which methods can run and whether their weights are cached.
+
+The model code of SEA-RAFT (BSD 3-Clause) and NeuFlow v2 (Apache 2.0) is included in motionflow; see their licences in `motionflow/methods/_vendor/`.
 
 ## conda-forge (conda / pixi / mamba)
 

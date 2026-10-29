@@ -87,3 +87,15 @@
 ::: motionflow.methods.deep.NeuFlowV2Flow
 
 ::: motionflow.methods.make_estimator
+
+::: motionflow.methods.deep.resolve_device
+
+## `motionflow.weights`
+
+::: motionflow.weights.fetch
+
+::: motionflow.weights.cache_dir
+
+::: motionflow.weights.is_cached
+
+::: motionflow.weights.WeightFile
