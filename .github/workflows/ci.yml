@@ -69,3 +69,34 @@ jobs:
 
       - name: Lint
         run: pixi run lint
+
+  deep:
+    name: Deep methods (PyTorch on CPU)
+    runs-on: ubuntu-latest
+    env:
+      # Let the tests download weights they don't find in the cache.
+      MOTIONFLOW_TEST_WEIGHTS: "1"
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up pixi
+        uses: prefix-dev/setup-pixi@v0.11.2
+        with:
+          pixi-version: v0.82.0
+          environments: torch
+          cache: true
+          cache-write: ${{ github.event_name == 'push' && github.ref_name == 'main' }}
+
+      - name: Cache model weights
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cache/motionflow/weights
+            ~/.cache/torch/hub/checkpoints
+          # weights.py lists the files and their checksums; torchvision's RAFT
+          # weights change with its version, which the lock file pins.
+          key: weights-${{ hashFiles('src/motionflow/weights.py', 'pixi.lock') }}
+          restore-keys: weights-
+
+      - name: Run deep-method tests
+        run: pixi run -e torch test tests/test_deep.py tests/test_weights.py tests/test_flow.py

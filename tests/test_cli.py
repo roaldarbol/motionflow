@@ -260,3 +260,9 @@ class TestUnusedOptions:
         result = runner.invoke(app, [str(clip), "-o", str(tmp_path / "o.mp4"), *args])
         assert result.exit_code == 0, strip(result.output)
         assert f"{flag} has no effect" in stderr(result)
+
+
+def test_download_classical_needs_nothing():
+    result = runner.invoke(app, ["download", "dis"])
+    assert result.exit_code == 0
+    assert "needs no weights" in stderr(result)

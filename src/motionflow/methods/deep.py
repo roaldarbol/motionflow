@@ -1,346 +1,256 @@
+"""Deep-learning optical flow (PyTorch): RAFT, SEA-RAFT and NeuFlow v2.
+
+Each estimator takes BGR ``uint8`` frames and returns ``(H, W, 2)`` float32
+flow in pixels, like the classical ones. Weights download on first use; see
+:mod:`motionflow.weights`. SEA-RAFT's and NeuFlow v2's model code is
+vendored in ``motionflow/methods/_vendor`` at pinned commits.
+"""
+
 from __future__ import annotations
 
-import shutil
-import tempfile
-from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
 
-import cv2
 import numpy as np
 
+from motionflow import weights
 from motionflow.methods.base import FlowEstimator
-from motionflow.weights import require_weights, weights_path
-
-_VENDOR_DIR = Path(__file__).parent / "_vendor"
 
 
-def _resolve_device(device: str) -> str:
-    """Resolve ``"auto"`` to the best available device string."""
-    if device != "auto":
-        return device
+def _require_torch() -> Any:
     try:
         import torch
-
-        if torch.cuda.is_available():
-            return "cuda"
-        if torch.backends.mps.is_available():
-            return "mps"
-    except ImportError:
-        pass
-    return "cpu"
-
-
-def _require_torch() -> None:
-    try:
-        import torch  # noqa: F401
         import torchvision  # noqa: F401
     except ImportError:
         raise RuntimeError(
-            "Deep learning methods require torch and torchvision. Install with:\n"
-            "  pip install motionflow[torch]\n"
-            "On conda-forge, pytorch and torchvision are included by default."
+            "Deep learning methods need PyTorch. Install it with:\n"
+            '  pip install "motionflow[torch]"\n'
+            "or follow https://pytorch.org/get-started/locally/ for a GPU build."
         ) from None
+    return torch
 
 
-def _require_vendor(name: str, sentinel: str) -> None:
-    """Ensure vendor architecture files are present, prompting the user if not."""
-    sentinel_path = _VENDOR_DIR / name / sentinel
-    if sentinel_path.exists():
-        return
+def resolve_device(device: str = "auto") -> Any:
+    """Turn ``"auto"``, ``"cuda"``, ``"cuda:1"``, ``"mps"`` or ``"cpu"`` into a torch device.
 
-    import sys
+    ``"auto"`` picks CUDA, then Apple's MPS, then the CPU.
 
-    _UPSTREAM = {
-        "sea_raft": "https://github.com/princeton-vl/SEA-RAFT",
-        "neuflow_v2": "https://github.com/neufieldrobotics/NeuFlow_v2",
-    }
-    source = _UPSTREAM.get(name, "upstream repository")
-
-    print(
-        f"\n  Architecture files for {name} are not installed.\n"
-        f"  Source : {source}\n"
-        f"  Destination : {_VENDOR_DIR / name}\n",
-        file=sys.stderr,
-    )
-    while True:
-        answer = input("  Download now? [y/N] ").strip().lower()
-        if answer in {"y", "yes"}:
-            break
-        if answer in {"", "n", "no"}:
-            raise RuntimeError(
-                f"Architecture files for {name} are required but were not downloaded. "
-                f"Re-run and accept the prompt, or see {source}."
-            )
-        print("  Please enter y or n.", file=sys.stderr)
-
-    from motionflow.methods._vendor_setup import setup_neuflow_v2, setup_sea_raft
-
-    if name == "sea_raft":
-        setup_sea_raft()
-    elif name == "neuflow_v2":
-        setup_neuflow_v2()
-    else:
-        raise RuntimeError(f"No vendor setup defined for {name!r}.")
+    Raises:
+        ValueError: For an unknown device name.
+        RuntimeError: If the requested device isn't available here.
+    """
+    torch = _require_torch()
+    if device == "auto":
+        if torch.cuda.is_available():
+            return torch.device("cuda")
+        if torch.backends.mps.is_available():
+            return torch.device("mps")
+        return torch.device("cpu")
+    kind = device.split(":")[0]
+    if kind not in {"cuda", "mps", "cpu"}:
+        raise ValueError(f"Unknown device {device!r}: use auto, cuda, mps or cpu.")
+    if kind == "cuda" and not torch.cuda.is_available():
+        raise RuntimeError(
+            "No CUDA GPU is available to this PyTorch (no NVIDIA driver, or a CPU-only "
+            "PyTorch build). Use --device cpu, or install a CUDA build of PyTorch."
+        )
+    if kind == "mps" and not torch.backends.mps.is_available():
+        raise RuntimeError("Apple's MPS isn't available here. Use --device cpu.")
+    return torch.device(device)
 
 
-class RAFTFlow(FlowEstimator):
-    """Dense optical flow via RAFT (Recurrent All-Pairs Field Transforms).
+def _check_size(method: str, size: str, sizes: tuple[str, ...]) -> str:
+    size = getattr(size, "value", size)
+    if size not in sizes:
+        raise ValueError(f"{method} sizes are {', '.join(sizes)}; got {size!r}.")
+    return size
 
-    Uses the torchvision implementation with pretrained weights. Weights are
-    downloaded automatically on first use and cached by torchvision — no manual
-    step required.
 
-    Reference: Teed & Deng, ECCV 2020. https://arxiv.org/abs/2003.12039
+# Smallest frame side the models get; smaller frames are padded up to it.
+_MIN_SIZE = 128
+
+
+class _TorchFlow(FlowEstimator):
+    """Shared plumbing: device, tensors, padding."""
+
+    def __init__(self, device: str) -> None:
+        self._torch = _require_torch()
+        self.device = resolve_device(device)
+
+    def _tensor(self, frame: np.ndarray, rgb: bool) -> Any:
+        """(H, W, 3) uint8 -> (1, 3, H, W) float32 on the device, 0-255."""
+        image = frame[..., ::-1] if rgb else frame
+        tensor = self._torch.from_numpy(np.ascontiguousarray(image))
+        return tensor.permute(2, 0, 1).unsqueeze(0).to(self.device, dtype=self._torch.float32)
+
+    def _pad(self, *tensors: Any, multiple: int) -> tuple[list[Any], tuple[int, int]]:
+        """Pad bottom/right by replicating edges, to a multiple of ``multiple``.
+
+        Frames smaller than ``_MIN_SIZE`` are padded up to it: the models'
+        correlation pyramids need a few pixels at their coarsest level.
+        """
+        h, w = tensors[0].shape[-2:]
+        pad_h = max(_MIN_SIZE - h, 0) + -max(h, _MIN_SIZE) % multiple
+        pad_w = max(_MIN_SIZE - w, 0) + -max(w, _MIN_SIZE) % multiple
+        if pad_h or pad_w:
+            pad = self._torch.nn.functional.pad
+            tensors = tuple(pad(t, (0, pad_w, 0, pad_h), mode="replicate") for t in tensors)
+        return list(tensors), (h, w)
+
+    @staticmethod
+    def _to_numpy(flow: Any, size: tuple[int, int]) -> np.ndarray:
+        """(2, H', W') tensor -> (H, W, 2) float32 array, cropped to ``size``."""
+        h, w = size
+        return flow[:, :h, :w].permute(1, 2, 0).float().cpu().numpy()
+
+
+class RAFTFlow(_TorchFlow):
+    """RAFT (Teed & Deng, ECCV 2020), torchvision's implementation and weights.
 
     Args:
-        size: Model variant — ``"large"`` for best accuracy or ``"small"`` for
-            speed.
-        device: Compute device. ``"auto"`` selects CUDA > MPS > CPU.
-        iters: Number of refinement iterations (higher = more accurate, slower).
+        size: ``"small"`` (faster) or ``"large"``.
+        device: ``"auto"``, ``"cuda"``, ``"mps"`` or ``"cpu"``.
+        iters: Refinement iterations; more is slower and slightly better.
+
+    Reference: Teed & Deng, "RAFT: Recurrent All-Pairs Field Transforms for
+    Optical Flow", ECCV 2020. https://arxiv.org/abs/2003.12039
     """
+
+    SIZES = ("small", "large")
+
+    def __init__(self, size: str = "large", device: str = "auto", iters: int = 12) -> None:
+        super().__init__(device)
+        self.size = _check_size("RAFT", size, self.SIZES)
+        if iters < 1:
+            raise ValueError(f"iters must be at least 1, got {iters}")
+        self.iters = iters
+        from torchvision.models import optical_flow as of
+
+        if self.size == "small":
+            weights_enum = of.Raft_Small_Weights.DEFAULT
+            self._model = of.raft_small(weights=weights_enum, progress=True)
+        else:
+            weights_enum = of.Raft_Large_Weights.DEFAULT
+            self._model = of.raft_large(weights=weights_enum, progress=True)
+        self._transforms = weights_enum.transforms()  # uint8 -> float, normalised to [-1, 1]
+        self._model = self._model.eval().to(self.device)
+
+    def estimate(self, prev: np.ndarray, curr: np.ndarray) -> np.ndarray:
+        torch = self._torch
+        with torch.inference_mode():
+            a = torch.from_numpy(np.ascontiguousarray(prev[..., ::-1])).permute(2, 0, 1)[None]
+            b = torch.from_numpy(np.ascontiguousarray(curr[..., ::-1])).permute(2, 0, 1)[None]
+            a, b = self._transforms(a, b)
+            (a, b), size = self._pad(a.to(self.device), b.to(self.device), multiple=8)
+            flows = self._model(a, b, num_flow_updates=self.iters)
+            return self._to_numpy(flows[-1][0], size)
+
+
+# SEA-RAFT eval configs (config/eval/spring-{S,M,L}.json upstream): the
+# model is the same for M and L, which only runs more iterations.
+_SEA_RAFT_CONFIG = {
+    "use_var": True,
+    "var_min": 0,
+    "var_max": 10,
+    "initial_dim": 64,
+    "block_dims": [64, 128, 256],
+    "radius": 4,
+    "dim": 128,
+    "num_blocks": 2,
+}
+_SEA_RAFT_SIZES = {
+    # size: (backbone, default iterations, weights)
+    "small": ("resnet18", 4, "sea-raft-small"),
+    "medium": ("resnet34", 4, "sea-raft-medium"),
+    "large": ("resnet34", 12, "sea-raft-medium"),
+}
+
+
+class SEARaftFlow(_TorchFlow):
+    """SEA-RAFT (Wang, Lipson & Deng, ECCV 2024): simpler, faster RAFT.
+
+    Args:
+        size: ``"small"``, ``"medium"`` or ``"large"``. Large is the medium
+            model with 12 refinement iterations instead of 4, as upstream.
+        device: ``"auto"``, ``"cuda"``, ``"mps"`` or ``"cpu"``.
+        iters: Refinement iterations; overrides the size's default.
+
+    Reference: Wang, Lipson & Deng, "SEA-RAFT: Simple, Efficient, Accurate
+    RAFT for Optical Flow", ECCV 2024. https://arxiv.org/abs/2405.14793
+    """
+
+    SIZES = tuple(_SEA_RAFT_SIZES)
 
     def __init__(
-        self,
-        size: str = "large",
-        device: str = "auto",
-        iters: int = 20,
+        self, size: str = "medium", device: str = "auto", iters: int | None = None
     ) -> None:
-        _require_torch()
-        import torch
+        super().__init__(device)
+        self.size = _check_size("SEA-RAFT", size, self.SIZES)
+        backbone, default_iters, weight_name = _SEA_RAFT_SIZES[self.size]
+        self.iters = iters if iters is not None else default_iters
+        if self.iters < 1:
+            raise ValueError(f"iters must be at least 1, got {self.iters}")
 
-        self._torch = torch
-        self._device = _resolve_device(device)
-        self._iters = iters
+        from motionflow.methods._vendor.sea_raft import RAFT
 
-        if size == "small":
-            from torchvision.models.optical_flow import Raft_Small_Weights, raft_small
-
-            self._model = raft_small(weights=Raft_Small_Weights.DEFAULT)
-        else:
-            from torchvision.models.optical_flow import Raft_Large_Weights, raft_large
-
-            self._model = raft_large(weights=Raft_Large_Weights.DEFAULT)
-
-        self._model = self._model.eval().to(self._device)
+        args = SimpleNamespace(**_SEA_RAFT_CONFIG, pretrain=backbone, iters=self.iters)
+        args.block_dims = list(args.block_dims)  # the model edits it in place
+        model = RAFT(args)
+        checkpoint = self._torch.load(
+            weights.fetch(weight_name), map_location="cpu", weights_only=True
+        )
+        model.load_state_dict(checkpoint["state_dict"])
+        self._model = model.eval().to(self.device)
 
     def estimate(self, prev: np.ndarray, curr: np.ndarray) -> np.ndarray:
-        h, w = prev.shape[:2]
-        prev_t, (pad_h, pad_w) = self._preprocess(prev)
-        curr_t, _ = self._preprocess(curr)
-
-        with self._torch.no_grad():
-            flows = self._model(prev_t, curr_t, num_flow_updates=self._iters)
-
-        flow = flows[-1][0].permute(1, 2, 0).cpu().numpy()
-
-        if pad_h > 0 or pad_w > 0:
-            flow = flow[:h, :w]
-
-        return flow
-
-    def _preprocess(self, frame: np.ndarray) -> tuple[object, tuple[int, int]]:
-        h, w = frame.shape[:2]
-        pad_h = (8 - h % 8) % 8
-        pad_w = (8 - w % 8) % 8
-
-        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        tensor = (
-            self._torch.from_numpy(rgb)
-            .permute(2, 0, 1)
-            .float()
-            .div(255.0)
-            .unsqueeze(0)
-            .to(self._device)
-        )
-
-        if pad_h > 0 or pad_w > 0:
-            import torch.nn.functional as F
-
-            tensor = F.pad(tensor, (0, pad_w, 0, pad_h))
-
-        return tensor, (pad_h, pad_w)
+        with self._torch.inference_mode():
+            a, b = self._tensor(prev, rgb=True), self._tensor(curr, rgb=True)
+            # The model normalises itself and pads to a multiple of 8; we only
+            # pad tiny frames up to the minimum size.
+            (a, b), size = self._pad(a, b, multiple=8)
+            out = self._model(a, b, iters=self.iters, test_mode=True)
+            return self._to_numpy(out["final"][0], size)
 
 
-class SEARaftFlow(FlowEstimator):
-    """Dense optical flow via SEA-RAFT (Simple, Efficient, Accurate RAFT).
-
-    SEA-RAFT is at least 2.3x faster than prior methods at comparable accuracy.
-
-    Warning:
-        Not working in this release: the model can't be loaded yet. It is
-        being reworked (https://github.com/roaldarbol/motionflow/issues/16).
-
-    Reference: Wang et al., ECCV 2024 (Best Paper candidate).
-    https://arxiv.org/abs/2405.14793
+class NeuFlowV2Flow(_TorchFlow):
+    """NeuFlow v2 (Zhang et al., 2024): fast optical flow for edge devices.
 
     Args:
-        size: Model variant — ``"large"`` or ``"medium"``.
-        device: Compute device. ``"auto"`` selects CUDA > MPS > CPU.
+        device: ``"auto"``, ``"cuda"``, ``"mps"`` or ``"cpu"``.
+        half: Run in half precision (float16), as upstream does on GPUs.
+            Defaults to ``True`` on CUDA and ``False`` elsewhere.
+
+    Reference: Zhang, Gu, Taylor & Wang, "NeuFlow v2: High-Efficiency
+    Optical Flow Estimation on Edge Devices", 2024.
+    https://arxiv.org/abs/2408.10161
     """
 
-    _HF_REPOS: dict[str, str] = {
-        "large": "MemorySlices/Tartan-C-T-TSKH-spring540x960-L",
-        "medium": "MemorySlices/Tartan-C-T-TSKH-spring540x960-M",
-    }
-    _FILENAMES: dict[str, str] = {
-        "large": "sea_raft_large.pth",
-        "medium": "sea_raft_medium.pth",
-    }
-
-    def __init__(self, size: str = "large", device: str = "auto") -> None:
-        _require_torch()
-        _require_vendor("sea_raft", "sea_raft.py")
-        self._device = _resolve_device(device)
-        self._size = size
-        self._model = self._load_model(size)
-
-    def _load_model(self, size: str) -> object:
-        import sys
-
-        import torch
-
-        try:
-            from huggingface_hub import hf_hub_download
-        except ImportError:
-            raise RuntimeError(
-                "SEA-RAFT requires huggingface-hub. Install with:\n  pip install huggingface-hub"
-            ) from None
-
-        if size not in self._HF_REPOS:
-            raise ValueError(f"Unknown SEA-RAFT size: {size!r}. Choose 'large' or 'medium'.")
-
-        hf_repo = self._HF_REPOS[size]
-        filename = self._FILENAMES[size]
-
-        def _download() -> None:
-            hf_path = hf_hub_download(repo_id=hf_repo, filename="model.pth")
-            shutil.copy2(hf_path, weights_path(filename))
-
-        weights = require_weights(
-            method=f"SEA-RAFT ({size})",
-            source=f"https://huggingface.co/{hf_repo}",
-            filename=filename,
-            downloader=_download,
-        )
-
-        # Import vendored architecture
-        vendor_dir = str(_VENDOR_DIR / "sea_raft")
-        if vendor_dir not in sys.path:
-            sys.path.insert(0, vendor_dir)
-        from sea_raft import RAFT as SEARaft  # type: ignore[import]
-
-        model = SEARaft()
-        checkpoint = torch.load(weights, map_location="cpu")
-        model.load_state_dict(checkpoint)
-        return model.eval().to(self._device)
-
-    def estimate(self, prev: np.ndarray, curr: np.ndarray) -> np.ndarray:
-        import torch
-
-        h, w = prev.shape[:2]
-        prev_t = self._to_tensor(prev)
-        curr_t = self._to_tensor(curr)
-
-        with torch.no_grad():
-            output = self._model(prev_t, curr_t)
-
-        # SEA-RAFT returns a dict with a "flow" key
-        flow = output["flow"][0].permute(1, 2, 0).cpu().numpy()
-        return flow[:h, :w]
-
-    def _to_tensor(self, frame: np.ndarray) -> object:
-        import torch
-
-        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        return torch.from_numpy(rgb).permute(2, 0, 1).float().unsqueeze(0).to(self._device)
-
-
-class NeuFlowV2Flow(FlowEstimator):
-    """Dense optical flow via NeuFlow v2.
-
-    NeuFlow v2 is optimised for efficiency, running 5–110x faster than
-    heavyweight methods at comparable accuracy, originally targeting edge devices.
-
-    Warning:
-        Not working in this release: the model can't be loaded yet. It is
-        being reworked (https://github.com/roaldarbol/motionflow/issues/16).
-
-    Reference: Zhang et al., 2024. https://arxiv.org/abs/2408.10161
-
-    Args:
-        device: Compute device. ``"auto"`` selects CUDA > MPS > CPU.
-    """
-
-    _WEIGHT_URL = (
-        "https://github.com/neufieldrobotics/NeuFlow_v2/releases/download/v1.0/neuflow_v2.pth"
-    )
-    _FILENAME = "neuflow_v2.pth"
-
-    def __init__(self, device: str = "auto") -> None:
-        _require_torch()
-        _require_vendor("neuflow_v2", "neuflow.py")
-        self._device = _resolve_device(device)
-        self._model = self._load_model()
-
-    def _load_model(self) -> object:
-        import sys
-
-        import torch
-
-        def _download() -> None:
-            import urllib.request
-
-            dest = weights_path(self._FILENAME)
-            print(
-                f"  Downloading NeuFlow v2 weights from {self._WEIGHT_URL} ...",
-                flush=True,
-            )
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".pth") as tmp:
-                urllib.request.urlretrieve(self._WEIGHT_URL, tmp.name)
-                shutil.copy2(tmp.name, dest)
-                Path(tmp.name).unlink(missing_ok=True)
-
-        weights = require_weights(
-            method="NeuFlow v2",
-            source=self._WEIGHT_URL,
-            filename=self._FILENAME,
-            downloader=_download,
-        )
-
-        # Import vendored architecture
-        vendor_dir = str(_VENDOR_DIR / "neuflow_v2")
-        if vendor_dir not in sys.path:
-            sys.path.insert(0, vendor_dir)
-        from neuflow import NeuFlow  # type: ignore[import]
+    def __init__(self, device: str = "auto", half: bool | None = None) -> None:
+        super().__init__(device)
+        self.half = self.device.type == "cuda" if half is None else half
+        from motionflow.methods._vendor.neuflow_v2 import NeuFlow
 
         model = NeuFlow()
-        checkpoint = torch.load(weights, map_location="cpu")
-        model.load_state_dict(checkpoint)
-        return model.eval().to(self._device)
+        checkpoint = self._torch.load(
+            weights.fetch("neuflow-v2"), map_location="cpu", weights_only=True
+        )
+        model.load_state_dict(checkpoint["model"])
+        model = model.eval().to(self.device)
+        self._model = model.half() if self.half else model
+        self._shape: tuple[int, int] | None = None
 
     def estimate(self, prev: np.ndarray, curr: np.ndarray) -> np.ndarray:
-        import torch
-
-        h, w = prev.shape[:2]
-        pad_h = (16 - h % 16) % 16
-        pad_w = (16 - w % 16) % 16
-
-        prev_t = self._to_tensor(prev, pad_h, pad_w)
-        curr_t = self._to_tensor(curr, pad_h, pad_w)
-
-        with torch.no_grad():
-            flow = self._model(prev_t, curr_t)
-
-        flow_np = flow[0].permute(1, 2, 0).cpu().numpy()
-        return flow_np[:h, :w]
-
-    def _to_tensor(self, frame: np.ndarray, pad_h: int, pad_w: int) -> object:
-        import torch
-        import torch.nn.functional as F
-
-        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        tensor = (
-            torch.from_numpy(rgb).permute(2, 0, 1).float().div(255.0).unsqueeze(0).to(self._device)
-        )
-        if pad_h > 0 or pad_w > 0:
-            tensor = F.pad(tensor, (0, pad_w, 0, pad_h))
-        return tensor
+        torch = self._torch
+        with torch.inference_mode():
+            # Upstream feeds BGR in 0-255; the model divides by 255 itself.
+            a, b = self._tensor(prev, rgb=False), self._tensor(curr, rgb=False)
+            (a, b), size = self._pad(a, b, multiple=16)
+            if self.half:
+                a, b = a.half(), b.half()
+            shape = tuple(a.shape[-2:])
+            if shape != self._shape:
+                # The model keeps size-dependent buffers; set them up per size.
+                self._model.init_bhwd(1, shape[0], shape[1], self.device, amp=self.half)
+                self._shape = shape
+            flows = self._model(a, b)
+            return self._to_numpy(flows[-1][0], size)
