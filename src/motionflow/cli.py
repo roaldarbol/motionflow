@@ -8,7 +8,7 @@ from rich.console import Console
 from rich.markup import escape
 
 from motionflow._version import __version__
-from motionflow.api import process_video
+from motionflow.flow import flow
 from motionflow.types import Method, ModelSize, NormalizeMode, VizStyle
 
 app = typer.Typer(
@@ -165,9 +165,9 @@ def main(
     try:
         with warnings.catch_warnings():
             warnings.showwarning = _show_warning
-            out = process_video(
-                input=input,
-                output=output,
+            result = flow(
+                input,
+                output,
                 method=method,
                 viz=viz,
                 blend=blend,
@@ -186,7 +186,7 @@ def main(
                 model_size=model_size,
                 quiver_step=quiver_step,
             )
-        console.print(f"[green]Done.[/green] Output: {escape(str(out))}")
+        console.print(f"[green]Done.[/green] Output: {escape(str(result.output))}")
     except KeyboardInterrupt:
         console.print("[yellow]Interrupted.[/yellow] No output was written.")
         raise typer.Exit(code=130) from None
