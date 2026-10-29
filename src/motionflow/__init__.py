@@ -1,16 +1,46 @@
-"""motionflow: CLI and Python API for optical flow video processing."""
+"""motionflow: motion visualisation for video, from the command line or Python."""
 
 from motionflow._version import __version__
 from motionflow.api import process_video
+from motionflow.flow import FlowRenderer, FlowTransform, flow
+from motionflow.methods import FlowEstimator, make_estimator
+from motionflow.pipeline import (
+    FrameTransform,
+    IOOptions,
+    Result,
+    Transform,
+    default_output_path,
+    run,
+)
 from motionflow.types import Method, ModelSize, NormalizeMode, VizStyle
+from motionflow.video import Frame, VideoReader, VideoWriter, parse_time
 from motionflow.weights import cache_dir
 
 __all__ = [
     "__version__",
-    "process_video",
+    # Optical flow
+    "flow",
+    "FlowTransform",
+    "FlowRenderer",
+    "FlowEstimator",
+    "make_estimator",
     "Method",
-    "VizStyle",
-    "NormalizeMode",
     "ModelSize",
+    "NormalizeMode",
+    "VizStyle",
+    # Pipeline
+    "run",
+    "Transform",
+    "FrameTransform",
+    "IOOptions",
+    "Result",
+    "default_output_path",
+    # Video
+    "VideoReader",
+    "VideoWriter",
+    "Frame",
+    "parse_time",
+    # Other
     "cache_dir",
+    "process_video",
 ]

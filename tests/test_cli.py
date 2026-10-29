@@ -55,7 +55,7 @@ def test_range_and_scale(clip, tmp_path):
     assert result.exit_code == 0, text(result)
     with VideoReader(out) as reader:
         assert (reader.width, reader.height) == (32, 24)
-        assert sum(1 for _ in reader) == 5
+        assert sum(1 for _ in reader) == 6
 
 
 def test_existing_output(clip, tmp_path):
@@ -85,20 +85,20 @@ def test_bad_time(clip, tmp_path):
 
 
 def test_square_brackets_survive(clip, monkeypatch):
-    def fail(**kwargs):
+    def fail(*args, **kwargs):
         raise RuntimeError('Install with: pip install "motionflow[torch]"')
 
-    monkeypatch.setattr(motionflow.cli, "process_video", fail)
+    monkeypatch.setattr(motionflow.cli, "flow", fail)
     result = runner.invoke(app, [str(clip)])
     assert result.exit_code == 1
     assert 'pip install "motionflow[torch]"' in text(result)
 
 
 def test_interrupt(clip, monkeypatch):
-    def interrupt(**kwargs):
+    def interrupt(*args, **kwargs):
         raise KeyboardInterrupt
 
-    monkeypatch.setattr(motionflow.cli, "process_video", interrupt)
+    monkeypatch.setattr(motionflow.cli, "flow", interrupt)
     result = runner.invoke(app, [str(clip)])
     assert result.exit_code == 130
     assert "Interrupted" in text(result)
