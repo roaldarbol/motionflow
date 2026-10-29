@@ -4,6 +4,7 @@
 
 ### Added
 
+- **Chromatic motion** (`motionflow chromatic`, `motionflow.chromatic()`, `ChromaticMotion`): BehaveAI's motion encoding (Troscianko et al., *PLOS Biology* 2026), with recent movement in blue and older movement in green and red over a dimmed greyscale frame. Written from the method's description, with BehaveAI's options: exponential or sequential references, gains, threshold, tail-only, motion-only and frame skipping (#21).
 - `motionflow download` fetches the deep methods' weights ahead of time; `motionflow methods` shows whether they're cached. Weights are checksummed and cached in `~/.cache/motionflow` (`MOTIONFLOW_CACHE_DIR` to move it) (#16).
 - SEA-RAFT has `small`, `medium` and `large` sizes; `--device` is checked up front with a clear message (#16).
 - **DIS optical flow** (`--method dis`, `DISFlow`), now the default. On 720p and 1080p test sequences with known motion it was 3–4× faster than Farneback and more accurate, including on large motions Farneback couldn't follow (#20).

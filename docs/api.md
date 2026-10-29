@@ -14,6 +14,12 @@ print(result.frames_written)  # same as the number of input frames
 
 `flow` returns a [`Result`](reference.md#motionflow.pipeline.Result) with the output path, frame counts, frame rate, encoder and processing time. `result.info["max_flow"]` is the flow magnitude shown at full brightness (`None` when each frame is scaled on its own).
 
+For BehaveAI's chromatic motion, `motionflow.chromatic` works the same way:
+
+```python
+result = motionflow.chromatic("recording.mp4", motion_only=True, frame_skip=3)
+```
+
 ## Frames line up with the input
 
 The output has one frame per input frame. Output frame *i* shows the motion from input frame *i − 1* to frame *i*, and frame 0, which has no frame before it, shows no motion. So output frame *i* can be matched to anything else recorded at input frame *i*, such as pose tracking or neural recordings.

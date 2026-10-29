@@ -38,6 +38,9 @@ motionflow recording.mp4 --start 1:30 --end 2:30 --scale 0.5
 # Every video in a folder; results in another folder
 motionflow trials/ -o results/
 
+# BehaveAI's chromatic motion: recent movement blue, older green and red
+motionflow chromatic recording.mp4
+
 # Which methods can run here
 motionflow methods
 ```

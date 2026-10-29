@@ -72,6 +72,30 @@ A compact model designed for speed on small devices: the fastest deep method her
 
 **Reference:** Zhang, Gu, Taylor & Wang, "NeuFlow v2: High-Efficiency Optical Flow Estimation on Edge Devices", 2024. [arXiv:2408.10161](https://arxiv.org/abs/2408.10161)
 
+## Chromatic motion (`motionflow chromatic`)
+
+The motion encoding of [BehaveAI](https://github.com/troscianko/BehaveAI). Each frame is compared with three references of increasing age, and the differences become colour channels drawn over a dimmed greyscale frame:
+
+- **blue**: change since the previous frame (recent motion);
+- **green**: change against a medium-term running average;
+- **red**: change against a long-term running average (older motion).
+
+A moving animal leaves a trail that fades from blue through green to red, while still parts of the scene stay grey. It isn't optical flow: it's frame differencing, so it's fast (tens of milliseconds per 720p frame) and doesn't need texture to track, but it shows *where* things changed rather than *which way* they moved.
+
+Options:
+
+- `--strategy exponential` (default) uses running averages that fade at rates `--exp-a` (green, default 0.5) and `--exp-b` (red, 0.8); `--strategy sequential` uses the last three frames instead.
+- `--gain` amplifies the differences (one value, or `recent,medium,older`); `--threshold` subtracts a constant to hide noise.
+- `--motion-only` draws the motion on black; `--lum-weight` sets the brightness of the greyscale frame otherwise.
+- `--tail-only` keeps in each colour only the motion the more recent one doesn't show, separating the bands.
+- `--frame-skip N` uses every (N+1)-th frame, as BehaveAI does: in slow-motion or high-frame-rate video, the motion between the frames used is larger. The output then has fewer frames.
+
+motionflow's implementation is written from the method's description (BehaveAI is AGPL-licensed; motionflow is MIT). It keeps the running averages in floating point, so it can differ slightly from BehaveAI's CPU output, which rounds them every frame.
+
+**Best for:** seeing where and when an animal moves, behaviour classification inputs, very fast processing.
+
+**Reference:** Troscianko, O'Shea-Wheller, Galloway & Gaston, "BehaveAI enables rapid detection and classification of objects and behavior from motion", *PLOS Biology* 24(2): e3003632 (2026). [doi:10.1371/journal.pbio.3003632](https://doi.org/10.1371/journal.pbio.3003632)
+
 ## Choosing a method
 
 | Method | Speed | Quality | Dense | GPU |

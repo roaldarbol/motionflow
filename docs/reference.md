@@ -10,6 +10,12 @@
 
 ::: motionflow.flow.measure_motion
 
+## `motionflow.chromatic`
+
+::: motionflow.chromatic.chromatic
+
+::: motionflow.chromatic.ChromaticMotion
+
 ## `motionflow.pipeline`
 
 ::: motionflow.pipeline.run
