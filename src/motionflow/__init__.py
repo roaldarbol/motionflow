@@ -2,6 +2,7 @@
 
 from motionflow._version import __version__
 from motionflow.api import process_video
+from motionflow.chromatic import ChromaticMotion, chromatic
 from motionflow.flow import FlowRenderer, FlowTransform, flow
 from motionflow.methods import FlowEstimator, make_estimator
 from motionflow.pipeline import (
@@ -28,6 +29,9 @@ __all__ = [
     "ModelSize",
     "NormalizeMode",
     "VizStyle",
+    # Chromatic motion
+    "chromatic",
+    "ChromaticMotion",
     # Pipeline
     "run",
     "Transform",

@@ -10,6 +10,7 @@ motionflow VIDEO... [OPTIONS]          # short for: motionflow flow VIDEO...
 | Command | What it does |
 |---------|--------------|
 | `flow` | Optical flow: how fast, and in which direction, each pixel moves. The default. |
+| `chromatic` | Chromatic motion (BehaveAI): recent movement blue, older green and red. See [Methods](methods.md#chromatic-motion-motionflow-chromatic). |
 | `methods` | List the optical flow methods, whether they can run here, and whether their weights are cached. |
 | `download` | Download the deep methods' weights now (they otherwise download on first use). |
 
@@ -87,12 +88,34 @@ Every command has these.
 | `-q, --quiet` | off | Print only output paths and errors. |
 | `-v, --verbose` | off | Show full error details. |
 
+## `chromatic` options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--strategy` | `exponential` | `exponential` (running averages) or `sequential` (the last three frames). |
+| `--exp-a FLOAT` | `0.5` | `exponential`: fade rate of the medium-term average (green); higher fades slower. |
+| `--exp-b FLOAT` | `0.8` | `exponential`: fade rate of the long-term average (red). |
+| `--gain TEXT` | `4` | Amplification of the differences: one value, or three as `recent,medium,older`. |
+| `--lum-weight FLOAT` | `0.7` | Brightness of the greyscale frame under the motion. |
+| `--motion-only` | off | Motion on black (`--lum-weight 0`). |
+| `--threshold FLOAT` | `0` | Subtracted from every channel to hide noise (0–255 scale). |
+| `--tail-only` | off | Each colour shows only motion the more recent one doesn't. |
+| `--frame-skip INT` | `0` | Use every (N+1)-th frame only: fewer output frames, larger motion between them. |
+
+Plus the [input and output options](#input-and-output). The default output name is `<input>_chromatic.<ext>`.
+
 ## Examples
 
 Basic usage with defaults (DIS, HSV visualisation):
 
 ```bash
 motionflow recording.mp4
+```
+
+Chromatic motion, on black, from every 4th frame of a slow-motion video:
+
+```bash
+motionflow chromatic slowmo.mp4 --motion-only --frame-skip 3
 ```
 
 Every video in a folder, results in another folder:

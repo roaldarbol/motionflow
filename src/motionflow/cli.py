@@ -23,6 +23,7 @@ from rich.table import Table
 from typer.core import TyperGroup
 
 from motionflow._version import __version__
+from motionflow.chromatic import chromatic
 from motionflow.flow import flow
 from motionflow.pipeline import Result, default_output_path
 from motionflow.types import Method, ModelSize, NormalizeMode, VizStyle
@@ -38,6 +39,7 @@ VIDEO_EXTENSIONS = {
 IO = "Input and output"
 DRAW = "Drawing"
 FLOW = "Flow"
+CHROMA = "Chromatic motion"
 
 
 class DefaultCommandGroup(TyperGroup):
@@ -377,6 +379,156 @@ def flow_command(
         )
 
     _run_batch(inputs, output, "_flow", process, quiet=quiet, verbose=verbose)
+
+
+# ---------------------------------------------------------------------------
+# chromatic
+# ---------------------------------------------------------------------------
+
+
+def _parse_gain(value: str) -> float | tuple[float, float, float]:
+    parts = [p for p in value.replace(",", " ").split() if p]
+    try:
+        numbers = [float(p) for p in parts]
+    except ValueError:
+        raise typer.BadParameter(f"not a number: {value!r}") from None
+    if len(numbers) == 1:
+        return numbers[0]
+    if len(numbers) == 3:
+        return (numbers[0], numbers[1], numbers[2])
+    raise typer.BadParameter("give one value, or three separated by commas (recent,medium,older)")
+
+
+@app.command("chromatic")
+def chromatic_command(
+    inputs: Inputs,
+    strategy: Annotated[
+        str,
+        typer.Option(
+            "--strategy",
+            help="exponential: running averages fading at --exp-a/--exp-b. sequential: the last three frames.",
+            rich_help_panel=CHROMA,
+        ),
+    ] = "exponential",
+    exp_a: Annotated[
+        float | None,
+        typer.Option(
+            "--exp-a",
+            min=0.0,
+            max=0.99,
+            help="exponential: fade rate of the medium-term average (green). \\[default: 0.5]",
+            show_default=False,
+            rich_help_panel=CHROMA,
+        ),
+    ] = None,
+    exp_b: Annotated[
+        float | None,
+        typer.Option(
+            "--exp-b",
+            min=0.0,
+            max=0.99,
+            help="exponential: fade rate of the long-term average (red). \\[default: 0.8]",
+            show_default=False,
+            rich_help_panel=CHROMA,
+        ),
+    ] = None,
+    gain: Annotated[
+        str,
+        typer.Option(
+            "--gain",
+            help="Amplification of the differences: one value, or recent,medium,older.",
+            rich_help_panel=CHROMA,
+        ),
+    ] = "4",
+    lum_weight: Annotated[
+        float,
+        typer.Option(
+            "--lum-weight",
+            min=0.0,
+            help="Brightness of the greyscale frame under the motion.",
+            rich_help_panel=CHROMA,
+        ),
+    ] = 0.7,
+    motion_only: Annotated[
+        bool,
+        typer.Option(
+            "--motion-only",
+            help="Motion on black (same as --lum-weight 0).",
+            rich_help_panel=CHROMA,
+        ),
+    ] = False,
+    threshold: Annotated[
+        float,
+        typer.Option(
+            "--threshold",
+            min=0.0,
+            help="Subtract this from every channel to hide noise (0-255).",
+            rich_help_panel=CHROMA,
+        ),
+    ] = 0.0,
+    tail_only: Annotated[
+        bool,
+        typer.Option(
+            "--tail-only",
+            help="Each colour shows only motion the more recent one doesn't.",
+            rich_help_panel=CHROMA,
+        ),
+    ] = False,
+    frame_skip: Annotated[
+        int,
+        typer.Option(
+            "--frame-skip",
+            min=0,
+            help="Use every (N+1)-th frame only: fewer output frames, larger motion between them.",
+            rich_help_panel=CHROMA,
+        ),
+    ] = 0,
+    output: Output = None,
+    overwrite: Overwrite = False,
+    start: Start = None,
+    end: End = None,
+    scale: Scale = 1.0,
+    fps: Fps = None,
+    codec: Codec = "auto",
+    crf: Crf = None,
+    quiet: Quiet = False,
+    verbose: Verbose = False,
+) -> None:
+    """Chromatic motion (BehaveAI): recent movement blue, older green and red.
+
+    Moving things leave a trail that fades from blue through green to red over
+    a dimmed greyscale frame; still parts stay grey.
+    """
+    if strategy not in ("exponential", "sequential"):
+        raise typer.BadParameter("exponential or sequential", param_hint="--strategy")
+    if strategy == "sequential":
+        _warn_unused("--strategy sequential", exp_a=exp_a, exp_b=exp_b)
+    gains = _parse_gain(gain)
+
+    def process(input: Path, out: Path, progress: bool | str) -> Result:
+        return chromatic(
+            input,
+            out,
+            strategy=strategy,  # type: ignore[arg-type]
+            exp_a=0.5 if exp_a is None else exp_a,
+            exp_b=0.8 if exp_b is None else exp_b,
+            gain=gains,
+            lum_weight=lum_weight,
+            motion_only=motion_only,
+            threshold=threshold,
+            tail_only=tail_only,
+            frame_skip=frame_skip,
+            start=start,
+            end=end,
+            scale=scale,
+            fps=fps,
+            codec=codec,
+            crf=crf,
+            overwrite=overwrite,
+            progress=progress,
+        )
+
+    _run_batch(inputs, output, "_chromatic", process, quiet=quiet, verbose=verbose)
 
 
 # ---------------------------------------------------------------------------
