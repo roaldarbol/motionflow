@@ -100,7 +100,7 @@ motionflow's implementation is written from the method's description (BehaveAI i
 
 An event camera (dynamic vision sensor, DVS) doesn't record frames: each pixel independently reports an *event* whenever its brightness changes by more than a contrast threshold, an ON event when it gets brighter and an OFF event when it gets darker. `motionflow events` simulates that from ordinary video, so you can see what an event camera would record, or produce event data for event-based methods.
 
-Each pixel keeps a reference log brightness; when the frame's log brightness differs from it by more than the threshold `--threshold` (default 0.2, about a 22% change), the pixel emits one event per threshold crossed and its reference moves by that many thresholds. When a pixel fires several events between two frames, they get timestamps spread linearly over the interval.
+Each pixel keeps a reference brightness; when its brightness differs from it by more than the threshold `--threshold` (default 0.2 in log units, about a 22% change), the pixel emits one event per threshold crossed and its reference moves by that many thresholds. Brightness is taken through a photoreceptor-like response, linear below 20 (of 255) and logarithmic above, as in v2e. When a pixel fires several events between two frames, they get timestamps spread linearly over the interval.
 
 The output video draws the events: ON blue, OFF red, on black (`--render polarity`), or the number of events per pixel as a heatmap (`--render count`). `--window N` draws the events of the last N frames together, as event cameras are usually shown; `--overlay` draws them over the greyscale video. `--save-events h5|npz|txt` also writes the event stream as `(t, x, y, p)` records, `p` being 1 for ON and 0 for OFF:
 
@@ -108,9 +108,37 @@ The output video draws the events: ON blue, OFF red, on black (`--render polarit
 - `npz`: NumPy arrays with the same names (held in memory, so for short clips).
 - `txt`: one event per line, `t x y p`, with `t` in seconds, as in the event-camera datasets of Mueggler et al. (2017).
 
-This is the ideal-sensor core model: no noise, every pixel identical, no bandwidth limit or refractory period. High-frame-rate video works best, since the simulator can't know what happened between frames. More realistic sensor effects are planned ([#23](https://github.com/roaldarbol/motionflow/issues/23)).
+### Sensor realism
+
+By default the sensor is ideal: every pixel identical and noiseless. `--sensor` adds the effects of real event cameras, following v2e's model and presets:
+
+| `--sensor` | Threshold spread | Bandwidth | Leak | Shot noise |
+|---|---|---|---|---|
+| `ideal` (default) | none | unlimited | none | none |
+| `clean` | 0.02 | unlimited | none | none |
+| `noisy` | 0.05 | 30 Hz | 0.1 Hz | 5 Hz |
+
+Each effect can be set on its own, overriding the preset:
+
+- `--threshold-sigma`: thresholds vary between pixels (Gaussian, in log units), so some pixels fire more readily than others.
+- `--cutoff-hz`: the photoreceptor is a low-pass filter whose bandwidth falls with brightness, so dim pixels respond late and fast motion smears. **`noisy`'s 30 Hz is deliberately pessimistic**, like a sensor in dim light: in a bright scene a real event camera has hundreds of hertz or more, and at 30 Hz fast objects can nearly vanish. For fast motion in good light, use `clean`, or `noisy` with a higher `--cutoff-hz`.
+- `--leak-rate`: each pixel's reference slowly drifts, giving occasional ON events in still scenes.
+- `--shot-noise-rate`: random ON and OFF events, more in dark areas and where thresholds are low.
+- `--refractory`: after an event a pixel can't fire for this many seconds; changes it misses fire later.
+
+`--seed` makes the random parts repeatable.
+
+### In-between frames
+
+The simulator only sees frames, so an object that moves several pixels between frames fires where it starts and where it ends, with a gap between. `--interpolate flow` makes in-between frames along optical flow (DIS, in both directions), so events fall along the path at their proper times. The number of steps per frame is chosen so that motion per step is about a pixel, up to `--max-upsample` (16); `--upsample` fixes it. v2e uses a neural network (SuperSloMo) for this; motionflow uses its own optical flow.
+
+It helps most with high-frame-rate video and moderate motion. It's about 10× slower, and small objects that jump far between frames are hard for the flow to follow, so their in-between frames partly cross-fade instead of moving.
+
+High-frame-rate video works best in any case, since the simulator can't know what happened between frames.
 
 Event streams are large: one second of 240 fps, 2.7K footage of a hammer throw gave about 10 million events.
+
+motionflow's sensor model follows v2e's ([SensorsINI/v2e](https://github.com/SensorsINI/v2e), MIT licence): its photoreceptor response, filter, leak and shot noise formulas, and its presets. Event timestamps within a frame are spread by where each threshold crossing falls, and the refractory period is applied per event.
 
 **References:** Lichtsteiner, Posch & Delbruck, "A 128×128 120 dB 15 µs latency asynchronous temporal contrast vision sensor", *IEEE Journal of Solid-State Circuits* 2008. Rebecq, Gehrig & Scaramuzza, "ESIM: an open event camera simulator", CoRL 2018. Hu, Liu & Delbruck, "v2e: From video frames to realistic DVS events", CVPR Workshops 2021.
 
