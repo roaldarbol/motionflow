@@ -68,10 +68,10 @@ lefthook = ">=2"
 [feature.dev.tasks]
 test = "python -m pytest"
 test-cov = "python -m pytest --cov=motionflow --cov-report=term-missing --cov-report=xml"
-lint = "ruff check src tests"
-lint-fix = "ruff check --fix src tests"
-format = "ruff format src tests"
-format-check = "ruff format --check src tests"
+lint = "ruff check src tests benchmarks"
+lint-fix = "ruff check --fix src tests benchmarks"
+format = "ruff format src tests benchmarks"
+format-check = "ruff format --check src tests benchmarks"
 lefthook = "lefthook"
 
 [feature.docs.dependencies]

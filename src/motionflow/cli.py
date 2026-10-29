@@ -205,7 +205,7 @@ def flow_command(
             help="Optical flow method. See: motionflow methods.",
             rich_help_panel=FLOW,
         ),
-    ] = Method.FARNEBACK,
+    ] = Method.DIS,
     stride: Annotated[
         int,
         typer.Option(
@@ -392,7 +392,8 @@ def methods_command() -> None:
     torch = importlib.util.find_spec("torch") is not None
     contrib = hasattr(cv2, "optflow")
     rows = [
-        (Method.FARNEBACK, "dense", "fast; the default", True, ""),
+        (Method.DIS, "dense", "fast and accurate; the default", True, ""),
+        (Method.FARNEBACK, "dense", "the default before 0.2", True, ""),
         (Method.TVL1, "dense", "sharp motion edges; slow", contrib, "needs OpenCV contrib"),
         (Method.LUCAS_KANADE, "points", "tracks points; drawn as dots or arrows", True, ""),
         (Method.RAFT, "dense, deep", "high quality; GPU recommended", torch, "needs torch"),

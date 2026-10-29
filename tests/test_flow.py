@@ -117,7 +117,7 @@ class TestFlowFunction:
         assert result.frames_written == 20
         with VideoReader(result.output) as reader:
             assert sum(1 for _ in reader) == 20
-        assert result.info["method"] == "farneback"
+        assert result.info["method"] == "dis"  # the default
         assert result.info["normalize"] == "auto"
         assert result.info["max_flow"] >= 1.0
 

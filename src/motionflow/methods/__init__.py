@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from motionflow.methods.base import FlowEstimator
-from motionflow.methods.classical import FarnebackFlow, LucasKanadeFlow, TVL1Flow
+from motionflow.methods.classical import DISFlow, FarnebackFlow, LucasKanadeFlow, TVL1Flow
 from motionflow.methods.deep import NeuFlowV2Flow, RAFTFlow, SEARaftFlow
 from motionflow.types import Method, ModelSize
 
 __all__ = [
     "FlowEstimator",
+    "DISFlow",
     "FarnebackFlow",
     "TVL1Flow",
     "LucasKanadeFlow",
@@ -42,6 +43,8 @@ def make_estimator(
     # .value, not str(): str() of a str-Enum member is 'ModelSize.SMALL'.
     s = model_size.value if isinstance(model_size, ModelSize) else str(model_size)
 
+    if m == Method.DIS:
+        return DISFlow()
     if m == Method.FARNEBACK:
         return FarnebackFlow()
     if m == Method.TVL1:

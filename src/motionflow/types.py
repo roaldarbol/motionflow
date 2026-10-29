@@ -4,6 +4,7 @@ from enum import Enum
 class Method(str, Enum):
     """Optical flow estimation method."""
 
+    DIS = "dis"
     FARNEBACK = "farneback"
     TVL1 = "tvl1"
     LUCAS_KANADE = "lucas-kanade"
