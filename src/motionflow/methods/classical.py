@@ -9,7 +9,8 @@ from motionflow.methods.base import FlowEstimator
 class FarnebackFlow(FlowEstimator):
     """Dense optical flow via Gunnar Farneback's polynomial expansion.
 
-    This is the default method — no additional dependencies required.
+    The default before motionflow 0.2. :class:`DISFlow` is faster and more
+    accurate on most footage.
 
     Args:
         pyr_scale: Scale between pyramid levels. ``0.5`` halves each level.
@@ -55,6 +56,50 @@ class FarnebackFlow(FlowEstimator):
             self.poly_sigma,
             self.flags,
         )
+
+
+class DISFlow(FlowEstimator):
+    """Dense optical flow via Dense Inverse Search (Kroeger et al., ECCV 2016).
+
+    The default method: on 720p and 1080p test sequences with known motion
+    it was 3-4x faster than Farneback and more accurate, including on large
+    motions Farneback can't follow. Part of standard OpenCV.
+
+    Args:
+        preset: ``"ultrafast"``, ``"fast"`` or ``"medium"`` (slowest, most
+            accurate). The other arguments override the preset's values.
+        patch_size: Size of the patches matched between frames, in pixels.
+        patch_stride: Spacing between patches; smaller is slower and denser.
+        refinement_iterations: Iterations of the variational refinement that
+            smooths the result; 0 turns it off.
+    """
+
+    PRESETS = ("ultrafast", "fast", "medium")
+
+    def __init__(
+        self,
+        preset: str = "medium",
+        patch_size: int | None = None,
+        patch_stride: int | None = None,
+        refinement_iterations: int | None = None,
+    ) -> None:
+        if preset not in self.PRESETS:
+            raise ValueError(f"preset must be one of {', '.join(self.PRESETS)}, got {preset!r}")
+        self.preset = preset
+        self._dis = cv2.DISOpticalFlow_create(
+            getattr(cv2, f"DISOPTICAL_FLOW_PRESET_{preset.upper()}")
+        )
+        if patch_size is not None:
+            self._dis.setPatchSize(patch_size)
+        if patch_stride is not None:
+            self._dis.setPatchStride(patch_stride)
+        if refinement_iterations is not None:
+            self._dis.setVariationalRefinementIterations(refinement_iterations)
+
+    def estimate(self, prev: np.ndarray, curr: np.ndarray) -> np.ndarray:
+        prev_gray = cv2.cvtColor(prev, cv2.COLOR_BGR2GRAY)
+        curr_gray = cv2.cvtColor(curr, cv2.COLOR_BGR2GRAY)
+        return self._dis.calc(prev_gray, curr_gray, None)
 
 
 class TVL1Flow(FlowEstimator):

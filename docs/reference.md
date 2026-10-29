@@ -72,6 +72,8 @@
 
 ::: motionflow.methods.base.FlowEstimator
 
+::: motionflow.methods.classical.DISFlow
+
 ::: motionflow.methods.classical.FarnebackFlow
 
 ::: motionflow.methods.classical.TVL1Flow

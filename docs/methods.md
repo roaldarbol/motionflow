@@ -4,15 +4,35 @@
 
 These run on CPU using OpenCV and require no additional dependencies beyond the base install.
 
+### DIS (`dis`)
+
+The default method. Dense Inverse Search matches small patches between frames, coarse to fine, then smooths the result with a variational refinement. Three presets trade speed for accuracy: `ultrafast`, `fast` and `medium` (the default); in Python, `DISFlow(preset="fast")`.
+
+On test sequences with known motion (translation, rotation with zoom, and an object moving over a still background), the `medium` preset was 3–4× faster than Farneback and more accurate:
+
+| 1920×1080, 8 CPU threads | Time per frame | Error, rotation + zoom | Error, moving object |
+|---|---|---|---|
+| `dis` (medium) | 101 ms | 0.04 px | 0.02 px |
+| `dis`, `fast` preset | 20 ms | 0.11 px | 0.05 px |
+| `farneback` | 305 ms | 3.18 px | 0.03 px |
+
+Farneback's large error under rotation and zoom comes from motions of up to ~40 px near the corners, more than it can follow with its default settings. The numbers come from [`benchmarks/flow_methods.py`](https://github.com/roaldarbol/motionflow/blob/main/benchmarks/flow_methods.py); times vary with the machine.
+
+**Best for:** almost everything without a GPU.
+
+**Reference:** Kroeger, Timofte, Dai & Van Gool, "Fast Optical Flow using Dense Inverse Search", ECCV 2016. [arXiv:1603.03590](https://arxiv.org/abs/1603.03590)
+
 ### Farneback (`farneback`)
 
-The default method. Estimates dense flow via polynomial expansion of each frame neighbourhood. Fast, robust, and produces smooth results. Suitable for most use cases.
+Estimates dense flow via polynomial expansion of each frame neighbourhood. Produces smooth results, but is slower than DIS and loses track of large motions. The default before motionflow 0.2.
 
-**Best for:** general-purpose flow, real-time-adjacent processing, long videos where GPU is unavailable.
+**Best for:** reproducing results made with motionflow 0.1.
+
+**Reference:** Farnebäck, "Two-Frame Motion Estimation Based on Polynomial Expansion", SCIA 2003.
 
 ### TV-L1 (`tvl1`)
 
-A variational method that minimises a total-variation energy functional. Produces sharper motion boundaries than Farneback but is considerably slower.
+A variational method that minimises a total-variation energy functional. Produces sharp motion boundaries but is considerably slower than DIS.
 
 **Best for:** scenes with hard motion edges, e.g. cut-out animation or text on screen.
 
@@ -63,7 +83,8 @@ Edge-optimised architecture running 5–110× faster than heavyweight models at 
 
 | Method | Speed | Quality | Dense | GPU |
 |--------|-------|---------|-------|-----|
-| `farneback` | Fast | Good | Yes | No |
+| `dis` | Fast | Very good | Yes | No |
+| `farneback` | Medium | Good; misses large motion | Yes | No |
 | `tvl1` | Slow | Better edges | Yes | No |
 | `lucas-kanade` | Fast | Sparse | No | No |
 | `raft` | Medium | Excellent | Yes | Yes |

@@ -1,15 +1,54 @@
 # Tests for classical optical flow estimators:
+# - DISFlow: shape, dtype, direction, accuracy on a known shift, presets
 # - FarnebackFlow: output shape, dtype, non-zero flow on motion
 # - LucasKanadeFlow: output shape, dtype, sparse flow characteristics
 # - TVL1Flow: output shape, dtype, non-zero flow on motion
 # - make_estimator: correct class returned per Method
+import cv2
 import numpy as np
 import pytest
 
 import motionflow.methods
 from motionflow.methods import make_estimator
-from motionflow.methods.classical import FarnebackFlow, LucasKanadeFlow, TVL1Flow
+from motionflow.methods.classical import DISFlow, FarnebackFlow, LucasKanadeFlow, TVL1Flow
 from motionflow.types import Method, ModelSize
+
+
+def smooth_texture_pair(dx: int = 3, dy: int = -2) -> tuple[np.ndarray, np.ndarray]:
+    """A smooth random texture and the same shifted by (dx, dy) pixels."""
+    rng = np.random.default_rng(0)
+    base = cv2.resize(rng.integers(0, 256, (60, 80), dtype=np.uint8), (320, 240), cv2.INTER_CUBIC)
+    base = cv2.cvtColor(cv2.GaussianBlur(base, (5, 5), 1.5), cv2.COLOR_GRAY2BGR)
+    M = np.float32([[1, 0, dx], [0, 1, dy]])
+    return base, cv2.warpAffine(base, M, (320, 240), borderMode=cv2.BORDER_REFLECT)
+
+
+class TestDISFlow:
+    def test_output_shape_and_dtype(self, checkerboard_frame, shifted_frame):
+        flow = DISFlow()(checkerboard_frame, shifted_frame)
+        assert flow.shape == (120, 160, 2)
+        assert flow.dtype == np.float32
+
+    @pytest.mark.parametrize("preset", DISFlow.PRESETS)
+    def test_accuracy_on_known_shift(self, preset):
+        a, b = smooth_texture_pair(3, -2)
+        flow = DISFlow(preset)(a, b)[16:-16, 16:-16]
+        error = np.linalg.norm(flow - np.array([3, -2], np.float32), axis=2).mean()
+        assert error < 0.2, f"{preset}: mean endpoint error {error:.3f} px"
+
+    def test_static_frames_produce_low_flow(self, checkerboard_frame):
+        flow = DISFlow()(checkerboard_frame, checkerboard_frame)
+        assert float(np.hypot(flow[..., 0], flow[..., 1]).max()) < 0.5
+
+    def test_overrides(self):
+        dis = DISFlow("fast", patch_size=12, patch_stride=6, refinement_iterations=0)
+        assert dis._dis.getPatchSize() == 12
+        assert dis._dis.getPatchStride() == 6
+        assert dis._dis.getVariationalRefinementIterations() == 0
+
+    def test_invalid_preset(self):
+        with pytest.raises(ValueError, match="preset"):
+            DISFlow("slow")
 
 
 class TestFarnebackFlow:
@@ -76,6 +115,7 @@ class TestMakeEstimator:
     @pytest.mark.parametrize(
         "method,expected_class",
         [
+            (Method.DIS, "DISFlow"),
             (Method.FARNEBACK, "FarnebackFlow"),
             (Method.LUCAS_KANADE, "LucasKanadeFlow"),
         ],

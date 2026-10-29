@@ -63,7 +63,7 @@ path = "src/motionflow/_version.py"
 packages = ["src/motionflow"]
 
 [tool.hatch.build.targets.sdist]
-exclude = ["/.github", "/pixi.lock"]
+exclude = ["/.github", "/pixi.lock", "/benchmarks"]
 
 # ---------------------------------------------------------------------------
 # Ruff

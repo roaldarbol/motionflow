@@ -130,7 +130,7 @@ class FlowTransform(Transform):
 
     def __init__(
         self,
-        estimator: FlowEstimator | str | Method = Method.FARNEBACK,
+        estimator: FlowEstimator | str | Method = Method.DIS,
         renderer: FlowRenderer | None = None,
         *,
         stride: int = 1,
@@ -318,7 +318,7 @@ def flow(
     input: Path | str,
     output: Path | str | None = None,
     *,
-    method: str | Method = Method.FARNEBACK,
+    method: str | Method = Method.DIS,
     viz: str | VizStyle = VizStyle.HSV,
     overlay: float | None = None,
     normalize: str | NormalizeMode = NormalizeMode.AUTO,
