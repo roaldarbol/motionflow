@@ -4,6 +4,9 @@
 
 ### Added
 
+- `motionflow.flow()` replaces `process_video()` and returns a `Result` (output path, frame counts, frame rate, encoder, timing, and the normalisation used). `process_video()` still works but is deprecated (#12).
+- A pipeline for any per-frame method: subclass `FrameTransform` (or `Transform`) and pass it to `motionflow.run()`, which handles reading, writing, ranges, scaling, output naming and safety. `FlowTransform.flows()` yields the flow fields themselves (#12).
+- Everything needed for custom pipelines is importable from `motionflow` (#12).
 - `--start`/`--end` (seconds, clock time or frame numbers), `--scale`, `--crf` and `--overwrite` options, also as `process_video` arguments.
 - `VideoReader.frames()` yields frames with their index and timestamp; `motionflow.video.parse_time` parses time positions.
 
@@ -21,6 +24,10 @@
 
 ### Changed
 
+- **The output has one frame per input frame**, so it lines up with the input: output frame *i* shows the motion from input frame *i − 1* to *i*, and frame 0 shows none. It used to have one frame fewer (#12).
+- **`stride`** estimates flow between frames `stride` apart and divides it by `stride`, so magnitudes stay in pixels per frame; before, they grew with the stride. The output still has one frame per input frame (#12).
+- **`smooth`** averages over a window centred on each frame instead of the preceding frames, so smoothing no longer lags behind the motion. `smooth=1` is the same as 0 (#12).
+- Progress bars adapt to notebooks and can be turned off (`progress=False`).
 - Video is read and written with PyAV (FFmpeg) instead of OpenCV. `.mp4` output is H.264 on every platform, so it plays in browsers, slides and Jupyter; `--codec` takes codec names (`h264`, `hevc`, `vp9`, `av1`, `ffv1`, `mjpeg`, `mpeg4`), and OpenCV FourCC codes still work (#13).
 - motionflow won't overwrite an existing output unless asked to (`--overwrite`, `overwrite=True`) (#10).
 - Default output names for inputs in containers motionflow can't write (`.ts`, `.h264`, …) end in `.mp4`.

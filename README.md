@@ -39,15 +39,10 @@ motionflow recording.mp4 --start 1:30 --end 2:30 --scale 0.5
 ### Python API
 
 ```python
-from motionflow import process_video
+import motionflow
 
-out = process_video(
-    "recording.mp4",
-    method="raft",
-    viz="hsv",
-    stride=2,
-    device="auto",
-)
+result = motionflow.flow("recording.mp4", method="raft", start="1:30", end="2:30")
+print(result.output)  # recording_flow.mp4, one frame per input frame
 ```
 
 ### Using estimators directly
