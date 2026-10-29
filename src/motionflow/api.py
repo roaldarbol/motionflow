@@ -60,8 +60,9 @@ def process_video(
             (H.264 for ``.mp4``/``.mov``/``.mkv``, VP9 for ``.webm``, MJPEG for
             ``.avi``). See :class:`~motionflow.video.VideoWriter` for the
             others.
-        crf: Output quality for H.264, HEVC, VP9 and AV1 (lower is better and
-            bigger). ``None`` uses a near-lossless default.
+        crf: Output quality, lower is better and bigger: the CRF for H.264,
+            HEVC, VP9 and AV1; the quantiser (2-31) for MJPEG and MPEG-4.
+            ``None`` uses a near-lossless default.
         fps: Output frames per second. Preserves the source FPS if ``None``.
         start: Where to start: seconds (``12.5``), clock time (``"1:30"``) or
             a frame number (``"120f"``). See :func:`~motionflow.video.parse_time`.

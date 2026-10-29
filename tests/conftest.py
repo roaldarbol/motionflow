@@ -38,6 +38,19 @@ def frame_id(frame: np.ndarray) -> int:
     return index
 
 
+def has_encoder(name: str) -> bool:
+    """Whether this FFmpeg build has the encoder (conda-forge's Windows build lacks VP9)."""
+    try:
+        av.codec.Codec(name, "w")
+    except (av.error.FFmpegError, ValueError):
+        return False
+    return True
+
+
+# PyAV < 17 (the newest for Python 3.10) can't write rotation metadata.
+CAN_WRITE_ROTATION = hasattr(av.video.stream.VideoStream, "set_display_rotation")
+
+
 def write_video(
     path: Path,
     n: int = 10,

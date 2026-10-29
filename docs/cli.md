@@ -25,7 +25,7 @@ motionflow [OPTIONS] INPUT
 | `--max-flow FLOAT` | — | Manual magnitude cap. Overrides `--normalize`. |
 | `--smooth INT` | `0` | Temporal smoothing window in frames. |
 | `--codec TEXT` | `auto` | Output codec. See [Output files](#output-files). |
-| `--crf INT` | — | Output quality for `h264`, `hevc`, `vp9` and `av1`: lower is better and bigger. |
+| `--crf INT` | — | Output quality, lower is better and bigger: the CRF for `h264`, `hevc`, `vp9` and `av1`; the quantiser (2–31) for `mjpeg` and `mpeg4`. |
 | `--start TIME` | — | Start here: seconds (`12.5`), clock time (`1:30`, `01:02:03.5`) or a frame number (`120f`). |
 | `--end TIME` | — | Stop here (exclusive), in the same formats as `--start`. |
 | `--scale FLOAT` | `1.0` | Resize before computing flow, e.g. `0.5` for half size. Much faster on large videos. |
@@ -95,7 +95,7 @@ The extension picks the container, and `--codec auto` picks a codec to match:
 |-----------|----------------|-------|
 | `.mp4`, `.m4v`, `.mov` | H.264 | Plays in browsers, slides and Jupyter |
 | `.mkv` | H.264 | |
-| `.webm` | VP9 | |
+| `.webm` | VP9 | AV1 where FFmpeg has no VP9 encoder (conda-forge on Windows) |
 | `.avi` | MJPEG | Large files; each frame stored separately |
 
 Other codecs: `hevc` (smaller files), `av1`, `ffv1` (lossless; use `.mkv`), `mjpeg`, `mpeg4`, or the name of any FFmpeg encoder, such as `h264_nvenc` on an NVIDIA GPU. OpenCV's FourCC codes (`mp4v`, `MJPG`, `avc1`) still work.

@@ -37,7 +37,7 @@ dependencies = [
     "typer>=0.12",
     "rich>=13",
     "tqdm>=4.66",
-    "av>=14",
+    "av>=16",
 ]
 
 [project.optional-dependencies]

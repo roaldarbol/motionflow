@@ -23221,7 +23221,7 @@ packages:
 - pypi: ./
   name: motionflow
   requires_dist:
-  - av>=14
+  - av>=16
   - numpy>=1.24
   - opencv-contrib-python-headless>=4.8
   - rich>=13

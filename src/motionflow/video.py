@@ -393,14 +393,16 @@ class VideoReader:
 # Writing
 # ---------------------------------------------------------------------------
 
-# Containers and the codec "auto" picks for each.
+# Containers and the codecs "auto" tries for each, best first. (Some FFmpeg
+# builds have no VP9 encoder, e.g. conda-forge's on Windows; WebM also takes
+# AV1.)
 _AUTO_CODEC = {
-    ".mp4": "h264",
-    ".m4v": "h264",
-    ".mov": "h264",
-    ".mkv": "h264",
-    ".webm": "vp9",
-    ".avi": "mjpeg",
+    ".mp4": ("h264",),
+    ".m4v": ("h264",),
+    ".mov": ("h264",),
+    ".mkv": ("h264",),
+    ".webm": ("vp9", "av1"),
+    ".avi": ("mjpeg",),
 }
 
 # Encoders to try for each codec, best first. The first one this FFmpeg build
@@ -436,8 +438,8 @@ _ALIASES = {
 # Default quality (CRF; lower is better) per encoder that supports it.
 _DEFAULT_CRF = {"libx264": 18, "libx265": 20, "libvpx-vp9": 31, "libsvtav1": 30, "libaom-av1": 30}
 
-# Encoders that take a quantiser scale rather than a CRF.
-_QSCALE_ENCODERS = {"mjpeg", "mpeg4"}
+# Encoders that take a fixed quantiser (2-31, lower is better) rather than a CRF.
+_QSCALE_ENCODERS = {"mjpeg": 3, "mpeg4": 3}
 
 SUPPORTED_EXTENSIONS = tuple(_AUTO_CODEC)
 SUPPORTED_CODECS = tuple(_ENCODERS)
@@ -460,16 +462,17 @@ def _resolve_encoder(codec: str, path: Path) -> str:
                 f"Can't write video to {path.name!r}: unknown extension {ext or '(none)'!r}. "
                 f"Use one of: {', '.join(SUPPORTED_EXTENSIONS)}."
             )
-        name = _AUTO_CODEC[ext]
+        names = _AUTO_CODEC[ext]
     else:
-        name = _ALIASES.get(codec.lower(), codec.lower())
+        names = (_ALIASES.get(codec.lower(), codec.lower()),)
 
-    if name in _ENCODERS:
-        for encoder in _ENCODERS[name]:
+    if names[0] in _ENCODERS:
+        tried = [encoder for name in names for encoder in _ENCODERS[name]]
+        for encoder in tried:
             if _has_encoder(encoder):
                 return encoder
         raise RuntimeError(
-            f"This FFmpeg build has no {name} encoder (tried {', '.join(_ENCODERS[name])})."
+            f"This FFmpeg build has no {' or '.join(names)} encoder (tried {', '.join(tried)})."
         )
     if _has_encoder(codec):  # an FFmpeg encoder name, e.g. "h264_nvenc"
         return codec
@@ -514,8 +517,9 @@ class VideoWriter:
             Otherwise one of ``h264``, ``hevc``, ``vp9``, ``av1``, ``ffv1``
             (lossless), ``mjpeg``, ``mpeg4``; an OpenCV FourCC such as
             ``mp4v``; or an FFmpeg encoder name such as ``h264_nvenc``.
-        crf: Quality for H.264, HEVC, VP9 and AV1; lower is better and
-            bigger. Defaults to a near-lossless setting per encoder.
+        crf: Quality; lower is better and bigger. For H.264, HEVC, VP9 and
+            AV1 this is the CRF; for MJPEG and MPEG-4, the quantiser (2-31).
+            Defaults to a near-lossless setting per encoder.
         overwrite: Replace ``path`` if it exists. Otherwise an existing file
             raises :class:`FileExistsError`.
 
@@ -651,8 +655,8 @@ class VideoWriter:
         elif self._encoder == "libsvtav1":
             options["preset"] = "8"
         elif self._encoder in _QSCALE_ENCODERS:
-            stream.codec_context.flags |= av.codec.context.Flags.qscale
-            stream.codec_context.global_quality = 3 * 118  # -q:v 3 (FF_QP2LAMBDA = 118)
+            q = str(self._crf if self._crf is not None else _QSCALE_ENCODERS[self._encoder])
+            options.update({"qmin": q, "qmax": q})
         elif self._encoder != "ffv1":
             # Encoders without a quality mode (openh264, hardware): a generous bitrate.
             stream.bit_rate = int(self._out_size[0] * self._out_size[1] * float(self._rate) * 0.3)

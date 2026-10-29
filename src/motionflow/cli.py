@@ -102,7 +102,7 @@ def main(
         None,
         "--crf",
         min=0,
-        help="Output quality for h264/hevc/vp9/av1: lower is better and bigger.",
+        help="Output quality, lower is better: CRF for h264/hevc/vp9/av1, quantiser (2-31) for mjpeg/mpeg4.",
         show_default=False,
     ),
     start: str | None = typer.Option(

@@ -10,7 +10,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from conftest import frame_id, id_frame, write_video
+from conftest import CAN_WRITE_ROTATION, frame_id, has_encoder, id_frame, write_video
 
 from motionflow.video import TimePoint, VideoReader, VideoWriter, parse_time
 
@@ -20,7 +20,12 @@ CONTAINERS = [
     ("clip.mov", "libx264", None),
     ("clip.mkv", "ffv1", None),
     ("clip.avi", "mjpeg", None),
-    ("clip.webm", "libvpx-vp9", None),
+    pytest.param(
+        "clip.webm",
+        "libvpx-vp9",
+        None,
+        marks=pytest.mark.skipif(not has_encoder("libvpx-vp9"), reason="no VP9 encoder"),
+    ),
     ("clip.ts", "libx264", "mpegts"),
     ("clip.h264", "libx264", "h264"),
 ]
@@ -97,6 +102,7 @@ class TestVideoReader:
         path = write_video(tmp_path / "clip.mp4", n=1)
         assert read_ids(path) == [0]
 
+    @pytest.mark.skipif(not CAN_WRITE_ROTATION, reason="this PyAV can't write rotation")
     @pytest.mark.parametrize("rotation", [90, -90, 180])
     def test_rotation_is_applied(self, tmp_path, rotation):
         path = write_video(tmp_path / "clip.mp4", rotation=rotation)
@@ -166,14 +172,15 @@ class TestVideoWriter:
             ("out.mp4", "libx264"),
             ("out.mov", "libx264"),
             ("out.mkv", "libx264"),
-            ("out.webm", "libvpx-vp9"),
+            # VP9, or AV1 where the FFmpeg build has no VP9 encoder
+            ("out.webm", {"libvpx-vp9", "libsvtav1", "libaom-av1"}),
             ("out.avi", "mjpeg"),
         ],
     )
     def test_round_trip(self, tmp_path, name, encoder):
         path = tmp_path / name
         with VideoWriter(path, 25, 64, 48) as writer:
-            assert writer.encoder == encoder
+            assert writer.encoder in ({encoder} if isinstance(encoder, str) else encoder)
             for i in range(10):
                 writer.write(id_frame(i))
         assert read_ids(path) == list(range(10))
@@ -218,13 +225,16 @@ class TestVideoWriter:
             assert (reader.width, reader.height) == (66, 50)
             assert frame_id(next(iter(reader))[:, :65]) == 5
 
-    def test_lower_crf_is_bigger(self, tmp_path):
+    @pytest.mark.parametrize(
+        ("ext", "codec", "low", "high"), [(".mp4", "h264", 10, 40), (".avi", "mjpeg", 2, 31)]
+    )
+    def test_lower_crf_is_bigger(self, tmp_path, ext, codec, low, high):
         rng = np.random.default_rng(0)
         frames = [rng.integers(0, 256, (48, 64, 3), dtype=np.uint8) for _ in range(5)]
         sizes = []
-        for crf in (10, 40):
-            path = tmp_path / f"crf{crf}.mp4"
-            with VideoWriter(path, 25, 64, 48, crf=crf) as writer:
+        for crf in (low, high):
+            path = tmp_path / f"crf{crf}{ext}"
+            with VideoWriter(path, 25, 64, 48, codec=codec, crf=crf) as writer:
                 for frame in frames:
                     writer.write(frame)
             sizes.append(path.stat().st_size)
