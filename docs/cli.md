@@ -18,11 +18,14 @@ motionflow [OPTIONS] INPUT
 |--------|---------|-------------|
 | `-o, --output PATH` | `<input>_flow.<ext>` | Output file path. See [Output files](#output-files). |
 | `-m, --method METHOD` | `farneback` | Flow algorithm. See [Methods](methods.md). |
-| `--viz STYLE` | `hsv` | Visualisation style. |
-| `--blend FLOAT` | `0.0` | Opacity of original frame over flow (0 = pure flow, 1 = pure original). |
+| `--viz STYLE` | `hsv` | `hsv` (hue is direction, brightness speed), `heatmap` (speed only) or `quiver` (arrows). See [Drawing the flow](#drawing-the-flow). |
+| `--overlay FLOAT` | — | Draw the flow over the original frame at this opacity (0–1). |
+| `--legend / --no-legend` | on | Draw a colour key in the bottom-right corner. |
 | `--stride INT` | `1` | Estimate flow every N frames, between frames N apart, and show it until the next estimate. Magnitudes stay in pixels per frame. Faster; the first N frames show no motion. |
-| `--normalize MODE` | `per-frame` | Magnitude normalisation: `per-frame` or `global`. |
-| `--max-flow FLOAT` | — | Manual magnitude cap. Overrides `--normalize`. |
+| `--normalize MODE` | `auto` | How speeds map to colours: `auto`, `global` or `per-frame`. See [Drawing the flow](#drawing-the-flow). |
+| `--percentile FLOAT` | `99` | For `auto` and `global`: the percentile of all motion drawn at full strength. |
+| `--max-flow FLOAT` | — | Fixed speed (pixels per frame) drawn at full strength. Overrides `--normalize`. |
+| `--min-flow FLOAT` | `0` | Draw motion below this many pixels per frame as none, to hide noise. |
 | `--smooth INT` | `0` | Average the flow over a window of N frames centred on each frame, so smoothing doesn't lag behind the motion. |
 | `--codec TEXT` | `auto` | Output codec. See [Output files](#output-files). |
 | `--crf INT` | — | Output quality, lower is better and bigger: the CRF for `h264`, `hevc`, `vp9` and `av1`; the quantiser (2–31) for `mjpeg` and `mpeg4`. |
@@ -34,6 +37,7 @@ motionflow [OPTIONS] INPUT
 | `--device TEXT` | `auto` | Device for deep methods: `auto`, `cuda`, `mps`, `cpu`. |
 | `--model-size SIZE` | `large` | Model size for RAFT/SEA-RAFT: `small` or `large`. |
 | `--quiver-step INT` | `16` | Grid spacing in pixels for quiver arrows. |
+| `--quiver-scale FLOAT` | auto | Arrow length per pixel of motion. By default the full-strength speed is drawn as 90% of the grid spacing. |
 | `--version` | — | Print version and exit. |
 
 ## Examples
@@ -44,10 +48,10 @@ Basic usage with defaults (Farneback, HSV visualisation):
 motionflow recording.mp4
 ```
 
-TV-L1 method, heatmap visualisation, composited 30% over the original:
+TV-L1 method, heatmap drawn over the original at 70% opacity:
 
 ```bash
-motionflow recording.mp4 --method tvl1 --viz heatmap --blend 0.3
+motionflow recording.mp4 --method tvl1 --viz heatmap --overlay 0.7
 ```
 
 RAFT with GPU, every other frame, saved to a specific path:
@@ -56,22 +60,39 @@ RAFT with GPU, every other frame, saved to a specific path:
 motionflow recording.mp4 --method raft --device cuda --stride 2 -o flow.mp4
 ```
 
-Global normalisation for a clip where most motion is subtle:
+The same colour scale for several videos, so they can be compared:
 
 ```bash
-motionflow recording.mp4 --normalize global
+motionflow trial1.mp4 --max-flow 5
+motionflow trial2.mp4 --max-flow 5
 ```
 
-!!! note
-    `--normalize global` reads the video twice — once to compute the maximum flow
-    magnitude across all frames, and once to render. For long videos, prefer
-    `--max-flow` with a manually estimated cap instead.
-
-Quiver overlay with coarser arrows:
+Quiver arrows on a coarser grid:
 
 ```bash
 motionflow recording.mp4 --viz quiver --quiver-step 32
 ```
+
+## Drawing the flow
+
+The flow is a speed and a direction for every pixel. The styles draw it as:
+
+- **`hsv`**: a colour wheel. The hue shows the direction of motion and the brightness its speed, so black means still. The legend's wheel shows which colour is which direction.
+- **`heatmap`**: speed only, from black (still) through purple and red to yellow (fast).
+- **`quiver`**: arrows over the original frame, each showing the average motion in its grid cell.
+
+Lucas-Kanade tracks individual points rather than every pixel, so its points are drawn as dots (`hsv`, `heatmap`) or arrows (`quiver`).
+
+### Which speed is full strength
+
+How speeds map to brightness decides what a viewer sees, so the default uses one scale for the whole video:
+
+- **`auto`** (default): full strength is the 99th percentile of all motion in the video (`--percentile`). The same brightness means the same speed in every frame. Short videos are measured exactly; long ones are sampled at 48 points, which costs 48 flow estimates rather than a full extra pass.
+- **`global`**: the same, measured on every frame. Exact, but it computes the flow twice.
+- **`per-frame`**: each frame is scaled to its own largest motion. A still frame then shows its sensor noise at full brightness, so stillness looks like motion. This was the default in motionflow 0.1.
+- **`--max-flow`**: a fixed speed in pixels per frame. Use it to compare videos on the same scale.
+
+The scale never goes below 1 pixel per frame, so a still video stays dark. For smaller motions, set `--max-flow`. The legend shows the speed used, and `--min-flow` hides motion slower than a threshold.
 
 One minute from 1:30, at half size:
 

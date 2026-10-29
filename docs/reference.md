@@ -8,6 +8,8 @@
 
 ::: motionflow.flow.FlowRenderer
 
+::: motionflow.flow.measure_motion
+
 ## `motionflow.pipeline`
 
 ::: motionflow.pipeline.run
@@ -54,9 +56,17 @@
 
 ::: motionflow.viz.flow_to_quiver
 
-::: motionflow.viz.flow_to_blend
+::: motionflow.viz.draw_sparse
 
-::: motionflow.viz.visualize_flow
+::: motionflow.viz.overlay
+
+::: motionflow.viz.add_legend
+
+::: motionflow.viz.hsv_wheel
+
+::: motionflow.viz.flow_magnitude
+
+::: motionflow.viz.quiver_scale
 
 ## `motionflow.methods`
 
