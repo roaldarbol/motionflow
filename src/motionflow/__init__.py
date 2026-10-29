@@ -3,6 +3,7 @@
 from motionflow._version import __version__
 from motionflow.api import process_video
 from motionflow.chromatic import ChromaticMotion, chromatic
+from motionflow.events import EventCamera, events
 from motionflow.flow import FlowRenderer, FlowTransform, flow
 from motionflow.methods import FlowEstimator, make_estimator
 from motionflow.pipeline import (
@@ -32,6 +33,9 @@ __all__ = [
     # Chromatic motion
     "chromatic",
     "ChromaticMotion",
+    # Event camera
+    "events",
+    "EventCamera",
     # Pipeline
     "run",
     "Transform",

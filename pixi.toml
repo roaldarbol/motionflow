@@ -61,6 +61,7 @@ motionflow = { path = ".", editable = true }
 
 [feature.dev.dependencies]
 pytest = ">=8"
+h5py = ">=3.8"  # event streams in HDF5 (the "events" extra)
 pytest-cov = ">=5"
 ruff = ">=0.15"
 lefthook = ">=2"
