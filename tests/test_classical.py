@@ -6,9 +6,10 @@
 import numpy as np
 import pytest
 
+import motionflow.methods
 from motionflow.methods import make_estimator
 from motionflow.methods.classical import FarnebackFlow, LucasKanadeFlow, TVL1Flow
-from motionflow.types import Method
+from motionflow.types import Method, ModelSize
 
 
 class TestFarnebackFlow:
@@ -90,3 +91,17 @@ class TestMakeEstimator:
     def test_string_input_accepted(self):
         estimator = make_estimator("farneback")
         assert isinstance(estimator, FarnebackFlow)
+
+    @pytest.mark.parametrize("size", [ModelSize.SMALL, "small", ModelSize.LARGE, "large"])
+    def test_model_size_reaches_estimator(self, monkeypatch, size):
+        # Regression: the enum used to arrive as the string "ModelSize.SMALL",
+        # so --model-size small silently loaded the large model.
+        received = {}
+
+        class FakeRAFT:
+            def __init__(self, size, device):
+                received["size"] = size
+
+        monkeypatch.setattr(motionflow.methods, "RAFTFlow", FakeRAFT)
+        make_estimator(Method.RAFT, model_size=size)
+        assert received["size"] == ModelSize(size).value

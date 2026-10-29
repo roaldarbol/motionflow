@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import warnings
 from pathlib import Path
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 
 from motionflow._version import __version__
 from motionflow.api import process_video
@@ -37,7 +39,7 @@ def main(
         None,
         "--output",
         "-o",
-        help="Output path. Defaults to <input_stem>_flow.<ext>.",
+        help="Output path. Defaults to <input_stem>_flow.<ext> next to the input.",
         show_default=False,
     ),
     method: Method = typer.Option(
@@ -90,8 +92,41 @@ def main(
     codec: str = typer.Option(
         "auto",
         "--codec",
-        help="FourCC codec for output video.",
+        help=(
+            "Output codec: auto (from the extension), h264, hevc, vp9, av1, "
+            "ffv1 (lossless), mjpeg, mpeg4, or an FFmpeg encoder name."
+        ),
         show_default=True,
+    ),
+    crf: int | None = typer.Option(
+        None,
+        "--crf",
+        min=0,
+        help="Output quality, lower is better: CRF for h264/hevc/vp9/av1, quantiser (2-31) for mjpeg/mpeg4.",
+        show_default=False,
+    ),
+    start: str | None = typer.Option(
+        None,
+        "--start",
+        help="Start at this time: seconds (12.5), clock time (1:30) or frame (120f).",
+        show_default=False,
+    ),
+    end: str | None = typer.Option(
+        None,
+        "--end",
+        help="Stop at this time (exclusive), in the same formats as --start.",
+        show_default=False,
+    ),
+    scale: float = typer.Option(
+        1.0,
+        "--scale",
+        help="Resize before computing flow, e.g. 0.5 for half size.",
+        show_default=True,
+    ),
+    overwrite: bool = typer.Option(
+        False,
+        "--overwrite",
+        help="Replace the output file if it already exists.",
     ),
     fps: float | None = typer.Option(
         None,
@@ -128,26 +163,43 @@ def main(
 ) -> None:
     """Compute and visualise optical flow from INPUT video."""
     try:
-        out = process_video(
-            input=input,
-            output=output,
-            method=method,
-            viz=viz,
-            blend=blend,
-            stride=stride,
-            normalize=normalize,
-            max_flow=max_flow,
-            smooth=smooth,
-            codec=codec,
-            fps=fps,
-            device=device,
-            model_size=model_size,
-            quiver_step=quiver_step,
-        )
-        console.print(f"[green]Done.[/green] Output: {out}")
-    except (OSError, RuntimeError, ValueError) as exc:
-        console.print(f"[red]Error:[/red] {exc}")
+        with warnings.catch_warnings():
+            warnings.showwarning = _show_warning
+            out = process_video(
+                input=input,
+                output=output,
+                method=method,
+                viz=viz,
+                blend=blend,
+                stride=stride,
+                normalize=normalize,
+                max_flow=max_flow,
+                smooth=smooth,
+                codec=codec,
+                crf=crf,
+                fps=fps,
+                start=start,
+                end=end,
+                scale=scale,
+                overwrite=overwrite,
+                device=device,
+                model_size=model_size,
+                quiver_step=quiver_step,
+            )
+        console.print(f"[green]Done.[/green] Output: {escape(str(out))}")
+    except KeyboardInterrupt:
+        console.print("[yellow]Interrupted.[/yellow] No output was written.")
+        raise typer.Exit(code=130) from None
+    except FileExistsError as exc:
+        console.print(f"[red]Error:[/red] {escape(str(exc))}. Use --overwrite to replace it.")
         raise typer.Exit(code=1) from exc
     except NotImplementedError as exc:
-        console.print(f"[yellow]Not implemented:[/yellow] {exc}")
+        console.print(f"[yellow]Not implemented:[/yellow] {escape(str(exc))}")
         raise typer.Exit(code=2) from exc
+    except (OSError, RuntimeError, ValueError) as exc:
+        console.print(f"[red]Error:[/red] {escape(str(exc))}")
+        raise typer.Exit(code=1) from exc
+
+
+def _show_warning(message, category, filename, lineno, file=None, line=None) -> None:
+    console.print(f"[yellow]Warning:[/yellow] {escape(str(message))}")

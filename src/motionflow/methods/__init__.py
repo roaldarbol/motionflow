@@ -39,7 +39,8 @@ def make_estimator(
         RuntimeError: When required dependencies are missing.
     """
     m = Method(method)
-    s = str(ModelSize(model_size) if isinstance(model_size, ModelSize) else model_size)
+    # .value, not str(): str() of a str-Enum member is 'ModelSize.SMALL'.
+    s = model_size.value if isinstance(model_size, ModelSize) else str(model_size)
 
     if m == Method.FARNEBACK:
         return FarnebackFlow()
