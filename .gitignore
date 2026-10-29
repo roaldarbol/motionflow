@@ -6,3 +6,4 @@ __pycache__
 *.avi
 *.mp4
 site/
+.devcontainer/
