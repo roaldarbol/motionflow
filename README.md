@@ -34,6 +34,12 @@ motionflow recording.mp4 --viz quiver --quiver-step 24
 
 # One minute from 1:30, at half size
 motionflow recording.mp4 --start 1:30 --end 2:30 --scale 0.5
+
+# Every video in a folder; results in another folder
+motionflow trials/ -o results/
+
+# Which methods can run here
+motionflow methods
 ```
 
 ### Python API
