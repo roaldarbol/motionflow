@@ -42,6 +42,7 @@ DRAW = "Drawing"
 FLOW = "Flow"
 CHROMA = "Chromatic motion"
 EVENTS = "Event camera"
+SENSOR = "Sensor realism (v2e)"
 
 
 class DefaultCommandGroup(TyperGroup):
@@ -568,14 +569,97 @@ def events_command(
             rich_help_panel=EVENTS,
         ),
     ] = None,
-    log_offset: Annotated[
-        float,
+    sensor: Annotated[
+        str,
         typer.Option(
-            "--log-offset",
-            help="Added to brightness (0-255) before the log; higher keeps dark noise quiet.",
-            rich_help_panel=EVENTS,
+            "--sensor",
+            help="ideal: identical noiseless pixels. clean: thresholds vary a little. noisy: also limited bandwidth, leak and shot noise (v2e's presets).",
+            rich_help_panel=SENSOR,
         ),
-    ] = 10.0,
+    ] = "ideal",
+    threshold_sigma: Annotated[
+        float | None,
+        typer.Option(
+            "--threshold-sigma",
+            min=0.0,
+            help="Spread of thresholds between pixels (log units).",
+            show_default=False,
+            rich_help_panel=SENSOR,
+        ),
+    ] = None,
+    cutoff_hz: Annotated[
+        float | None,
+        typer.Option(
+            "--cutoff-hz",
+            min=0.0,
+            help="Photoreceptor bandwidth at full brightness (0 = unlimited); dark pixels are slower.",
+            show_default=False,
+            rich_help_panel=SENSOR,
+        ),
+    ] = None,
+    leak_rate: Annotated[
+        float | None,
+        typer.Option(
+            "--leak-rate",
+            min=0.0,
+            help="Leak events per pixel per second.",
+            show_default=False,
+            rich_help_panel=SENSOR,
+        ),
+    ] = None,
+    shot_noise_rate: Annotated[
+        float | None,
+        typer.Option(
+            "--shot-noise-rate",
+            min=0.0,
+            help="Random noise events per pixel per second.",
+            show_default=False,
+            rich_help_panel=SENSOR,
+        ),
+    ] = None,
+    refractory: Annotated[
+        float | None,
+        typer.Option(
+            "--refractory",
+            min=0.0,
+            help="Seconds after an event during which a pixel can't fire.",
+            show_default=False,
+            rich_help_panel=SENSOR,
+        ),
+    ] = None,
+    seed: Annotated[
+        int,
+        typer.Option(
+            "--seed", help="Random seed for threshold spread and noise.", rich_help_panel=SENSOR
+        ),
+    ] = 0,
+    interpolate: Annotated[
+        str,
+        typer.Option(
+            "--interpolate",
+            help="flow: in-between frames along optical flow, so fast motion fires along its path. none: the frames as they are.",
+            rich_help_panel=SENSOR,
+        ),
+    ] = "none",
+    upsample: Annotated[
+        int | None,
+        typer.Option(
+            "--upsample",
+            min=1,
+            help="--interpolate flow: in-between steps per frame. \\[default: about 1 px of motion per step]",
+            show_default=False,
+            rich_help_panel=SENSOR,
+        ),
+    ] = None,
+    max_upsample: Annotated[
+        int,
+        typer.Option(
+            "--max-upsample",
+            min=1,
+            help="--interpolate flow: most in-between steps per frame.",
+            rich_help_panel=SENSOR,
+        ),
+    ] = 16,
     render: Annotated[
         str,
         typer.Option(
@@ -640,6 +724,12 @@ def events_command(
     """
     if render not in ("polarity", "count"):
         raise typer.BadParameter("polarity or count", param_hint="--render")
+    if sensor not in ("ideal", "clean", "noisy"):
+        raise typer.BadParameter("ideal, clean or noisy", param_hint="--sensor")
+    if interpolate not in ("none", "flow"):
+        raise typer.BadParameter("none or flow", param_hint="--interpolate")
+    if interpolate == "none":
+        _warn_unused("--interpolate none", upsample=upsample)
     if save_events is not None and save_events.lower().lstrip(".") not in (
         "h5",
         "hdf5",
@@ -656,7 +746,16 @@ def events_command(
             threshold=threshold,
             on_threshold=on_threshold,
             off_threshold=off_threshold,
-            log_offset=log_offset,
+            sensor=sensor,  # type: ignore[arg-type]
+            threshold_sigma=threshold_sigma,
+            cutoff_hz=cutoff_hz,
+            leak_rate_hz=leak_rate,
+            shot_noise_rate_hz=shot_noise_rate,
+            refractory=refractory,
+            seed=seed,
+            interpolate=interpolate,  # type: ignore[arg-type]
+            upsample=upsample,
+            max_upsample=max_upsample,
             render=render,  # type: ignore[arg-type]
             window=window,
             overlay=overlay,
