@@ -1,0 +1,17 @@
+# Git hooks. Install once with: pixi run lefthook install
+# They run through pixi, so they work from any shell or editor.
+pre-commit:
+  commands:
+    format:
+      glob: "*.py"
+      run: pixi run ruff format {staged_files}
+      stage_fixed: true
+    lint:
+      glob: "*.py"
+      run: pixi run ruff check --fix {staged_files}
+      stage_fixed: true
+
+pre-push:
+  commands:
+    tests:
+      run: pixi run test -q

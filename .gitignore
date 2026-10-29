@@ -1,9 +1,26 @@
-.pytest_cache
-.venv
-.cache
-__pycache__
+# Python
+__pycache__/
+.venv/
+dist/
+build/
+*.egg-info/
+
+# Tools
+.pixi/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+.cache/
+
+# Docs
+site/
+
+# Local
 .DS_Store
+.devcontainer/
+
+# Videos made while trying things out
 *.avi
 *.mp4
-site/
-.devcontainer/
