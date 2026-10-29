@@ -11,6 +11,7 @@ motionflow VIDEO... [OPTIONS]          # short for: motionflow flow VIDEO...
 |---------|--------------|
 | `flow` | Optical flow: how fast, and in which direction, each pixel moves. The default. |
 | `chromatic` | Chromatic motion (BehaveAI): recent movement blue, older green and red. See [Methods](methods.md#chromatic-motion-motionflow-chromatic). |
+| `events` | Simulate an event camera: ON/OFF events where brightness changes. See [Methods](methods.md#event-camera-simulation-motionflow-events). |
 | `methods` | List the optical flow methods, whether they can run here, and whether their weights are cached. |
 | `download` | Download the deep methods' weights now (they otherwise download on first use). |
 
@@ -104,6 +105,21 @@ Every command has these.
 
 Plus the [input and output options](#input-and-output). The default output name is `<input>_chromatic.<ext>`.
 
+## `events` options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--threshold FLOAT` | `0.2` | Contrast threshold: the change in log brightness per event (0.2 is about 22%). |
+| `--on-threshold`, `--off-threshold` | `--threshold` | Separate thresholds for ON (brighter) and OFF (darker) events. |
+| `--log-offset FLOAT` | `10` | Added to brightness (0–255) before the log; higher keeps noise in dark areas quiet. |
+| `--render` | `polarity` | `polarity` (ON blue, OFF red) or `count` (events per pixel as a heatmap). |
+| `--window INT` | `1` | Draw the events of the last N frames together. |
+| `--overlay FLOAT` | — | Draw the events over the greyscale video at this opacity. |
+| `--full-count INT` | `4` | Events per pixel drawn at full strength. |
+| `--save-events` | — | Also write the event stream next to each output: `h5`, `npz` or `txt`. |
+
+Plus the [input and output options](#input-and-output). The default output name is `<input>_events.<ext>`; with `--save-events h5`, the stream goes in `<input>_events.h5`.
+
 ## Examples
 
 Basic usage with defaults (DIS, HSV visualisation):
@@ -116,6 +132,12 @@ Chromatic motion, on black, from every 4th frame of a slow-motion video:
 
 ```bash
 motionflow chromatic slowmo.mp4 --motion-only --frame-skip 3
+```
+
+An event camera on a high-speed video, events of the last 8 frames per frame, with the event stream saved:
+
+```bash
+motionflow events highspeed.mp4 --window 8 --save-events h5
 ```
 
 Every video in a folder, results in another folder:

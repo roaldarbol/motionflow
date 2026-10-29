@@ -24,6 +24,7 @@ from typer.core import TyperGroup
 
 from motionflow._version import __version__
 from motionflow.chromatic import chromatic
+from motionflow.events import events
 from motionflow.flow import flow
 from motionflow.pipeline import Result, default_output_path
 from motionflow.types import Method, ModelSize, NormalizeMode, VizStyle
@@ -40,6 +41,7 @@ IO = "Input and output"
 DRAW = "Drawing"
 FLOW = "Flow"
 CHROMA = "Chromatic motion"
+EVENTS = "Event camera"
 
 
 class DefaultCommandGroup(TyperGroup):
@@ -529,6 +531,151 @@ def chromatic_command(
         )
 
     _run_batch(inputs, output, "_chromatic", process, quiet=quiet, verbose=verbose)
+
+
+# ---------------------------------------------------------------------------
+# events
+# ---------------------------------------------------------------------------
+
+
+@app.command("events")
+def events_command(
+    inputs: Inputs,
+    threshold: Annotated[
+        float,
+        typer.Option(
+            "--threshold",
+            min=0.0,
+            help="Contrast threshold: change in log brightness per event (0.2 is ~22%).",
+            rich_help_panel=EVENTS,
+        ),
+    ] = 0.2,
+    on_threshold: Annotated[
+        float | None,
+        typer.Option(
+            "--on-threshold",
+            help="Threshold for ON (brighter) events. \\[default: --threshold]",
+            show_default=False,
+            rich_help_panel=EVENTS,
+        ),
+    ] = None,
+    off_threshold: Annotated[
+        float | None,
+        typer.Option(
+            "--off-threshold",
+            help="Threshold for OFF (darker) events. \\[default: --threshold]",
+            show_default=False,
+            rich_help_panel=EVENTS,
+        ),
+    ] = None,
+    log_offset: Annotated[
+        float,
+        typer.Option(
+            "--log-offset",
+            help="Added to brightness (0-255) before the log; higher keeps dark noise quiet.",
+            rich_help_panel=EVENTS,
+        ),
+    ] = 10.0,
+    render: Annotated[
+        str,
+        typer.Option(
+            "--render",
+            help="polarity: ON blue, OFF red. count: events per pixel as a heatmap.",
+            rich_help_panel=EVENTS,
+        ),
+    ] = "polarity",
+    window: Annotated[
+        int,
+        typer.Option(
+            "--window",
+            min=1,
+            help="Draw the events of the last N frames together.",
+            rich_help_panel=EVENTS,
+        ),
+    ] = 1,
+    overlay: Annotated[
+        float | None,
+        typer.Option(
+            "--overlay",
+            min=0.0,
+            max=1.0,
+            help="Draw the events over the greyscale video at this opacity.",
+            show_default=False,
+            rich_help_panel=EVENTS,
+        ),
+    ] = None,
+    full_count: Annotated[
+        int,
+        typer.Option(
+            "--full-count",
+            min=1,
+            help="Events per pixel drawn at full strength.",
+            rich_help_panel=EVENTS,
+        ),
+    ] = 4,
+    save_events: Annotated[
+        str | None,
+        typer.Option(
+            "--save-events",
+            help="Also write the event stream next to each output: h5 (needs h5py), npz or txt.",
+            show_default=False,
+            rich_help_panel=EVENTS,
+        ),
+    ] = None,
+    output: Output = None,
+    overwrite: Overwrite = False,
+    start: Start = None,
+    end: End = None,
+    scale: Scale = 1.0,
+    fps: Fps = None,
+    codec: Codec = "auto",
+    crf: Crf = None,
+    quiet: Quiet = False,
+    verbose: Verbose = False,
+) -> None:
+    """Simulate an event camera: pixels report brightness changes as ON/OFF events.
+
+    The video shows the events (ON blue, OFF red); --save-events also writes
+    them as (t, x, y, polarity) records.
+    """
+    if render not in ("polarity", "count"):
+        raise typer.BadParameter("polarity or count", param_hint="--render")
+    if save_events is not None and save_events.lower().lstrip(".") not in (
+        "h5",
+        "hdf5",
+        "npz",
+        "txt",
+    ):
+        raise typer.BadParameter("h5, npz or txt", param_hint="--save-events")
+
+    def process(input: Path, out: Path, progress: bool | str) -> Result:
+        stream = out.with_suffix("." + save_events.lower().lstrip(".")) if save_events else None
+        result = events(
+            input,
+            out,
+            threshold=threshold,
+            on_threshold=on_threshold,
+            off_threshold=off_threshold,
+            log_offset=log_offset,
+            render=render,  # type: ignore[arg-type]
+            window=window,
+            overlay=overlay,
+            full_count=full_count,
+            save_events=stream,
+            start=start,
+            end=end,
+            scale=scale,
+            fps=fps,
+            codec=codec,
+            crf=crf,
+            overwrite=overwrite,
+            progress=progress,
+        )
+        if stream is not None:
+            typer.echo(str(stream))  # stdout, like the video path
+        return result
+
+    _run_batch(inputs, output, "_events", process, quiet=quiet, verbose=verbose)
 
 
 # ---------------------------------------------------------------------------

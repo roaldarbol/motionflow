@@ -45,6 +45,9 @@ torch = [
     "torch>=2.1",
     "torchvision>=0.16",
 ]
+events = [
+    "h5py>=3.8",
+]
 
 [project.scripts]
 motionflow = "motionflow.cli:app"

@@ -16,6 +16,14 @@
 
 ::: motionflow.chromatic.ChromaticMotion
 
+## `motionflow.events`
+
+::: motionflow.events.events
+
+::: motionflow.events.EventCamera
+
+::: motionflow.events.EventWriter
+
 ## `motionflow.pipeline`
 
 ::: motionflow.pipeline.run

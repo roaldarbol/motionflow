@@ -41,6 +41,9 @@ motionflow trials/ -o results/
 # BehaveAI's chromatic motion: recent movement blue, older green and red
 motionflow chromatic recording.mp4
 
+# Simulate an event camera, saving the events too
+motionflow events recording.mp4 --save-events h5
+
 # Which methods can run here
 motionflow methods
 ```

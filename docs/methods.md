@@ -96,6 +96,24 @@ motionflow's implementation is written from the method's description (BehaveAI i
 
 **Reference:** Troscianko, O'Shea-Wheller, Galloway & Gaston, "BehaveAI enables rapid detection and classification of objects and behavior from motion", *PLOS Biology* 24(2): e3003632 (2026). [doi:10.1371/journal.pbio.3003632](https://doi.org/10.1371/journal.pbio.3003632)
 
+## Event camera simulation (`motionflow events`)
+
+An event camera (dynamic vision sensor, DVS) doesn't record frames: each pixel independently reports an *event* whenever its brightness changes by more than a contrast threshold, an ON event when it gets brighter and an OFF event when it gets darker. `motionflow events` simulates that from ordinary video, so you can see what an event camera would record, or produce event data for event-based methods.
+
+Each pixel keeps a reference log brightness; when the frame's log brightness differs from it by more than the threshold `--threshold` (default 0.2, about a 22% change), the pixel emits one event per threshold crossed and its reference moves by that many thresholds. When a pixel fires several events between two frames, they get timestamps spread linearly over the interval.
+
+The output video draws the events: ON blue, OFF red, on black (`--render polarity`), or the number of events per pixel as a heatmap (`--render count`). `--window N` draws the events of the last N frames together, as event cameras are usually shown; `--overlay` draws them over the greyscale video. `--save-events h5|npz|txt` also writes the event stream as `(t, x, y, p)` records, `p` being 1 for ON and 0 for OFF:
+
+- `h5`: HDF5, datasets `events/t` (microseconds), `events/x`, `events/y`, `events/p`; needs h5py (`pip install "motionflow[events]"`).
+- `npz`: NumPy arrays with the same names (held in memory, so for short clips).
+- `txt`: one event per line, `t x y p`, with `t` in seconds, as in the event-camera datasets of Mueggler et al. (2017).
+
+This is the ideal-sensor core model: no noise, every pixel identical, no bandwidth limit or refractory period. High-frame-rate video works best, since the simulator can't know what happened between frames. More realistic sensor effects are planned ([#23](https://github.com/roaldarbol/motionflow/issues/23)).
+
+Event streams are large: one second of 240 fps, 2.7K footage of a hammer throw gave about 10 million events.
+
+**References:** Lichtsteiner, Posch & Delbruck, "A 128×128 120 dB 15 µs latency asynchronous temporal contrast vision sensor", *IEEE Journal of Solid-State Circuits* 2008. Rebecq, Gehrig & Scaramuzza, "ESIM: an open event camera simulator", CoRL 2018. Hu, Liu & Delbruck, "v2e: From video frames to realistic DVS events", CVPR Workshops 2021.
+
 ## Choosing a method
 
 | Method | Speed | Quality | Dense | GPU |

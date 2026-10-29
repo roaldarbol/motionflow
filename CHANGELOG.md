@@ -4,6 +4,7 @@
 
 ### Added
 
+- **Event camera simulation** (`motionflow events`, `motionflow.events()`, `EventCamera`): pixels emit ON/OFF events when their log brightness changes by more than a contrast threshold, drawn as a video (polarity or count, over a window of frames, optionally over the original), with the event stream optionally saved as HDF5 (`motionflow[events]`), `.npz` or text. The ideal-sensor core model; realism comes later (#22).
 - **Chromatic motion** (`motionflow chromatic`, `motionflow.chromatic()`, `ChromaticMotion`): BehaveAI's motion encoding (Troscianko et al., *PLOS Biology* 2026), with recent movement in blue and older movement in green and red over a dimmed greyscale frame. Written from the method's description, with BehaveAI's options: exponential or sequential references, gains, threshold, tail-only, motion-only and frame skipping (#21).
 - `motionflow download` fetches the deep methods' weights ahead of time; `motionflow methods` shows whether they're cached. Weights are checksummed and cached in `~/.cache/motionflow` (`MOTIONFLOW_CACHE_DIR` to move it) (#16).
 - SEA-RAFT has `small`, `medium` and `large` sizes; `--device` is checked up front with a clear message (#16).

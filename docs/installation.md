@@ -48,6 +48,12 @@ motionflow download sea-raft     # just one
 
 The model code of SEA-RAFT (BSD 3-Clause) and NeuFlow v2 (Apache 2.0) is included in motionflow; see their licences in `motionflow/methods/_vendor/`.
 
+Writing event streams as HDF5 (`motionflow events --save-events h5`) needs h5py:
+
+```bash
+pip install "motionflow[events]"
+```
+
 ## conda-forge (conda / pixi / mamba)
 
 A conda-forge package is planned but not available yet. Until then, install from PyPI.
