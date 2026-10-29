@@ -36,3 +36,10 @@ def test_arguments_pass_through(tiny_video, tmp_path):
 def test_errors_pass_through(tiny_video, tmp_path):
     with pytest.warns(DeprecationWarning), pytest.raises(ValueError):
         process_video(tiny_video, output=tmp_path / "out.mp4", stride=0)
+
+
+@pytest.mark.parametrize(("viz", "blend"), [("blend", 0.3), ("hsv", 0.4), ("blend", 0.0)])
+def test_old_blend_options(tiny_video, tmp_path, viz, blend):
+    with pytest.warns(DeprecationWarning):
+        out = process_video(tiny_video, output=tmp_path / "out.mp4", viz=viz, blend=blend)
+    assert out.exists()

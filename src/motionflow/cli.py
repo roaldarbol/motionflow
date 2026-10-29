@@ -52,16 +52,21 @@ def main(
     viz: VizStyle = typer.Option(
         VizStyle.HSV,
         "--viz",
-        help="Visualisation style.",
+        help="hsv: hue is direction, brightness speed. heatmap: speed only. quiver: arrows.",
         show_default=True,
     ),
-    blend: float = typer.Option(
-        0.0,
-        "--blend",
+    overlay: float | None = typer.Option(
+        None,
+        "--overlay",
         min=0.0,
         max=1.0,
-        help="Opacity of original frame over flow visualisation (0 = pure flow, 1 = pure original).",
-        show_default=True,
+        help="Draw the flow over the original frame at this opacity (0-1).",
+        show_default=False,
+    ),
+    legend: bool = typer.Option(
+        True,
+        "--legend/--no-legend",
+        help="Draw a colour key in the bottom-right corner.",
     ),
     stride: int = typer.Option(
         1,
@@ -71,16 +76,35 @@ def main(
         show_default=True,
     ),
     normalize: NormalizeMode = typer.Option(
-        NormalizeMode.PER_FRAME,
+        NormalizeMode.AUTO,
         "--normalize",
-        help="Flow magnitude normalisation. 'global' requires a full first pass.",
+        help=(
+            "How speeds map to colours. auto: one scale for the whole video (sampled "
+            "on long videos); global: the same from every frame; per-frame: each frame "
+            "on its own."
+        ),
+        show_default=True,
+    ),
+    percentile: float = typer.Option(
+        99.0,
+        "--percentile",
+        min=0.0,
+        max=100.0,
+        help="For auto/global: the percentile of all motion drawn at full strength.",
         show_default=True,
     ),
     max_flow: float | None = typer.Option(
         None,
         "--max-flow",
-        help="Manual flow magnitude cap. Overrides --normalize.",
+        help="Fixed speed (pixels per frame) drawn at full strength. Overrides --normalize.",
         show_default=False,
+    ),
+    min_flow: float = typer.Option(
+        0.0,
+        "--min-flow",
+        min=0.0,
+        help="Draw motion below this many pixels per frame as none (hides noise).",
+        show_default=True,
     ),
     smooth: int = typer.Option(
         0,
@@ -153,6 +177,12 @@ def main(
         help="Grid spacing in pixels for quiver arrows.",
         show_default=True,
     ),
+    quiver_scale: float | None = typer.Option(
+        None,
+        "--quiver-scale",
+        help="Arrow length per pixel of motion. Automatic if not set.",
+        show_default=False,
+    ),
     version: bool | None = typer.Option(
         None,
         "--version",
@@ -170,7 +200,11 @@ def main(
                 output,
                 method=method,
                 viz=viz,
-                blend=blend,
+                overlay=overlay,
+                legend=legend,
+                percentile=percentile,
+                min_flow=min_flow,
+                quiver_scale=quiver_scale,
                 stride=stride,
                 normalize=normalize,
                 max_flow=max_flow,

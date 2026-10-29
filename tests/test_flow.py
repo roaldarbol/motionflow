@@ -12,6 +12,7 @@ import pytest
 from conftest import frame_id, write_video
 
 from motionflow import FlowRenderer, FlowTransform, flow
+from motionflow.flow import MIN_SCALE, SAMPLES, measure_motion
 from motionflow.methods import FlowEstimator
 from motionflow.video import Frame, VideoReader
 
@@ -54,7 +55,7 @@ class TestAlignment:
         assert dx_per_frame(FlowTransform(FrameNumberFlow()), 5) == [0, 1, 1, 1, 1]
 
     def test_first_frame_shows_no_motion(self):
-        renderer = FlowRenderer("hsv")
+        renderer = FlowRenderer("hsv", legend=False)
         images = list(FlowTransform(FrameNumberFlow(), renderer).process(frames(3)))
         assert len(images) == 3
         assert images[0].max() == 0  # no motion is black in HSV
@@ -116,28 +117,42 @@ class TestFlowFunction:
         assert result.frames_written == 20
         with VideoReader(result.output) as reader:
             assert sum(1 for _ in reader) == 20
-        assert result.info == {"method": "farneback", "max_flow": None}
+        assert result.info["method"] == "farneback"
+        assert result.info["normalize"] == "auto"
+        assert result.info["max_flow"] >= 1.0
 
     def test_detects_motion(self, tiny_video, tmp_path):
         # tiny_video shifts right by 2 px per frame.
-        result = flow(tiny_video, tmp_path / "out.mkv", codec="ffv1", progress=False)
+        result = flow(tiny_video, tmp_path / "out.mkv", codec="ffv1", legend=False, progress=False)
         with VideoReader(result.output) as reader:
             images = list(reader)
         assert images[0].max() == 0
         assert images[5].mean() > 20
 
-    @pytest.mark.parametrize("viz", ["hsv", "heatmap", "quiver", "blend"])
-    def test_viz_styles(self, tiny_video, tmp_path, viz):
-        result = flow(tiny_video, tmp_path / f"{viz}.mp4", viz=viz, blend=0.4, progress=False)
+    @pytest.mark.parametrize("viz", ["hsv", "heatmap", "quiver"])
+    @pytest.mark.parametrize("overlay", [None, 0.6])
+    def test_viz_styles(self, tiny_video, tmp_path, viz, overlay):
+        result = flow(tiny_video, tmp_path / f"{viz}.mp4", viz=viz, overlay=overlay, progress=False)
         assert result.frames_written == 20
+
+    def test_blend_style_is_gone(self, tiny_video, tmp_path):
+        with pytest.raises(ValueError):
+            flow(tiny_video, tmp_path / "out.mp4", viz="blend", progress=False)
 
     def test_global_normalisation(self, tiny_video, tmp_path):
         result = flow(tiny_video, tmp_path / "out.mp4", normalize="global", progress=False)
-        assert result.info["max_flow"] > 1.0
+        # tiny_video moves 2 px/frame
+        assert result.info["max_flow"] == pytest.approx(2.0, rel=0.25)
+        assert result.info["normalize"] == "global"
+
+    def test_per_frame(self, tiny_video, tmp_path):
+        result = flow(tiny_video, tmp_path / "out.mp4", normalize="per-frame", progress=False)
+        assert result.info["max_flow"] is None
 
     def test_max_flow(self, tiny_video, tmp_path):
         result = flow(tiny_video, tmp_path / "out.mp4", max_flow=20.0, progress=False)
         assert result.info["max_flow"] == 20.0
+        assert result.info["normalize"] == "fixed"
 
     @pytest.mark.parametrize("kwargs", [{"stride": 2}, {"smooth": 3}, {"scale": 0.5}])
     def test_options(self, tiny_video, tmp_path, kwargs):
@@ -173,7 +188,11 @@ class TestFlowFunction:
         [
             {"stride": 0},
             {"smooth": -1},
-            {"blend": 2.0},
+            {"overlay": 2.0},
+            {"min_flow": -1},
+            {"percentile": 0},
+            {"percentile": 101},
+            {"quiver_scale": 0},
             {"fps": 0},
             {"max_flow": 0},
             {"max_flow": -3},
@@ -197,7 +216,15 @@ class TestFlowFunction:
 
 class TestRenderer:
     @pytest.mark.parametrize(
-        "kwargs", [{"blend": -0.1}, {"blend": 1.5}, {"max_flow": 0}, {"quiver_step": 0}]
+        "kwargs",
+        [
+            {"overlay": -0.1},
+            {"overlay": 1.5},
+            {"max_flow": 0},
+            {"min_flow": -1},
+            {"quiver_step": 0},
+            {"quiver_scale": 0},
+        ],
     )
     def test_invalid(self, kwargs):
         with pytest.raises(ValueError):
@@ -206,3 +233,74 @@ class TestRenderer:
     def test_invalid_style(self):
         with pytest.raises(ValueError):
             FlowRenderer("sparkles")
+
+
+class TestMeasureMotion:
+    def test_exact_on_short_videos(self, tiny_video):
+        transform = FlowTransform("farneback")
+        with VideoReader(tiny_video) as reader:
+            magnitudes = np.concatenate(
+                [
+                    np.hypot(f[..., 0], f[..., 1])[::2, ::2].ravel()
+                    for _, f in transform.flows(reader.frames())
+                ]
+            )
+        expected = float(np.percentile(magnitudes, 90))
+        measured = measure_motion(transform, tiny_video, percentile=90, progress=False)
+        assert measured == pytest.approx(expected, rel=0.02)
+
+    def test_sampling_agrees_with_full_pass(self, tmp_path):
+        # Longer than 4 x SAMPLES frames, so "auto" samples.
+        src = write_moving_video(tmp_path / "long.mp4", n=4 * SAMPLES + 40)
+        transform = FlowTransform("farneback")
+        sampled = measure_motion(transform, src, sample=True, progress=False)
+        full = measure_motion(transform, src, sample=False, progress=False)
+        assert sampled == pytest.approx(full, rel=0.15)
+        assert sampled == pytest.approx(3.0, rel=0.25)  # the video moves 3 px/frame
+
+    def test_still_video_is_floored(self, tmp_path):
+        src = write_video(tmp_path / "still.mp4", n=10)  # stripes never move
+        result = flow(src, progress=False)
+        assert result.info["max_flow"] == MIN_SCALE
+
+
+def write_moving_video(path: Path, n: int, step: int = 3) -> Path:
+    """Smooth random texture moving ``step`` px/frame to the right."""
+    import av
+    import cv2
+
+    rng = np.random.default_rng(0)
+    base = cv2.GaussianBlur(rng.integers(0, 256, (96, 128, 3), dtype=np.uint8), (7, 7), 2)
+    with av.open(str(path), "w") as container:
+        stream = container.add_stream("libx264", rate=25)
+        stream.width, stream.height, stream.pix_fmt = 128, 96, "yuv420p"
+        stream.options = {"qp": "10"}
+        for i in range(n):
+            image = np.ascontiguousarray(np.roll(base, step * i, axis=1))
+            for packet in stream.encode(av.VideoFrame.from_ndarray(image, format="bgr24")):
+                container.mux(packet)
+        for packet in stream.encode():
+            container.mux(packet)
+    return path
+
+
+class TestSparseMethods:
+    def test_lucas_kanade_output_is_not_empty(self, tmp_path):
+        src = write_moving_video(tmp_path / "moving.mp4", n=6)
+        result = flow(src, method="lucas-kanade", legend=False, codec="ffv1",
+                      output=tmp_path / "lk.mkv", progress=False)  # fmt: skip
+        with VideoReader(result.output) as reader:
+            images = list(reader)
+        lit = np.any(images[3] > 0, axis=2).mean()
+        assert lit > 0.01  # dots, not an all-black frame
+
+    def test_scale_comes_from_tracked_points(self, tmp_path):
+        src = write_moving_video(tmp_path / "moving.mp4", n=8)  # 3 px/frame
+        result = flow(src, method="lucas-kanade", progress=False)
+        assert result.info["max_flow"] == pytest.approx(3.0, rel=0.25)
+
+    def test_renderer_switches_to_sparse(self):
+        from motionflow.methods import LucasKanadeFlow
+
+        assert FlowTransform(LucasKanadeFlow()).renderer.sparse
+        assert not FlowTransform("farneback").renderer.sparse

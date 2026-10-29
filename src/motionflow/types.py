@@ -26,14 +26,21 @@ class VizStyle(str, Enum):
     HSV = "hsv"
     HEATMAP = "heatmap"
     QUIVER = "quiver"
-    BLEND = "blend"
 
 
 class NormalizeMode(str, Enum):
-    """Flow magnitude normalisation strategy."""
+    """How flow magnitudes are scaled to colours.
 
-    PER_FRAME = "per-frame"
+    - ``auto``: one scale for the whole video, from a percentile of its
+      motion; exact for short videos, sampled for long ones.
+    - ``global``: the same, from every frame (a full extra pass).
+    - ``per-frame``: each frame scaled to its own largest motion. Still
+      scenes then look busy, since their noise is stretched to full scale.
+    """
+
+    AUTO = "auto"
     GLOBAL = "global"
+    PER_FRAME = "per-frame"
 
 
 class ModelSize(str, Enum):

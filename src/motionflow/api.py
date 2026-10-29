@@ -7,7 +7,7 @@ from pathlib import Path
 
 from motionflow.flow import flow
 from motionflow.pipeline import ProgressCallback, default_output_path
-from motionflow.types import Method, ModelSize, NormalizeMode, VizStyle
+from motionflow.types import Method, ModelSize, NormalizeMode
 from motionflow.video import TimePoint
 
 __all__ = ["default_output_path", "process_video"]
@@ -17,7 +17,7 @@ def process_video(
     input: Path | str,
     output: Path | str | None = None,
     method: str | Method = Method.FARNEBACK,
-    viz: str | VizStyle = VizStyle.HSV,
+    viz: str = "hsv",
     blend: float = 0.0,
     stride: int = 1,
     normalize: str | NormalizeMode = NormalizeMode.PER_FRAME,
@@ -38,9 +38,13 @@ def process_video(
     """Compute optical flow for a video and write a visualisation of it.
 
     .. deprecated:: 0.2
-        Use :func:`motionflow.flow`, which takes the same arguments (as
-        keywords) and returns a :class:`~motionflow.pipeline.Result` with
-        more detail than the output path.
+        Use :func:`motionflow.flow`, which returns a
+        :class:`~motionflow.pipeline.Result` with more detail than the
+        output path. Its ``overlay`` replaces ``blend`` (``overlay = 1 -
+        blend``, and ``viz="blend"`` is ``viz="hsv"`` with an overlay), and
+        it scales colours to the whole video by default.
+
+    This wrapper keeps the 0.1 look: colours scaled per frame, no legend.
 
     Returns:
         Path to the written output video.
@@ -51,12 +55,17 @@ def process_video(
         DeprecationWarning,
         stacklevel=2,
     )
+    if viz == "blend":
+        viz, overlay = "hsv", 1.0 - blend
+    else:
+        overlay = 1.0 - blend if blend > 0 else None
     return flow(
         input,
         output,
         method=method,
         viz=viz,
-        blend=blend,
+        overlay=overlay,
+        legend=False,
         stride=stride,
         normalize=normalize,
         max_flow=max_flow,
