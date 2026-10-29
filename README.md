@@ -9,14 +9,11 @@ motionflow input.mp4
 ## Install
 
 ```bash
-pip install motionflow          # classical methods only
-pip install motionflow[torch]   # + RAFT and deep methods
+pip install motionflow            # classical methods
+pip install "motionflow[torch]"   # + deep methods (RAFT)
 ```
 
-```bash
-conda install -c conda-forge motionflow    # includes PyTorch
-pixi global install motionflow             # auto-selects GPU/CPU torch
-```
+A conda-forge package is planned. See the [installation guide](https://roaldarbol.github.io/motionflow/installation/) for PyTorch builds and GPU support.
 
 ## Usage
 
@@ -29,8 +26,8 @@ motionflow recording.mp4
 # RAFT on GPU, heatmap style, every other frame
 motionflow recording.mp4 --method raft --device cuda --viz heatmap --stride 2
 
-# Blend flow 40% over original, with temporal smoothing
-motionflow recording.mp4 --viz blend --blend 0.4 --smooth 3
+# Show the original frame at 40% opacity over the flow, with temporal smoothing
+motionflow recording.mp4 --blend 0.4 --smooth 3
 
 # Quiver arrow overlay
 motionflow recording.mp4 --viz quiver --quiver-step 24
@@ -66,11 +63,11 @@ vis  = flow_to_hsv(flow)                         # BGR image
 | Method | Type | GPU | Notes |
 |--------|------|-----|-------|
 | `farneback` | Dense | No | Default, fast |
-| `tvl1` | Dense | No | Sharp edges, slow; requires opencv-contrib |
-| `lucas-kanade` | Sparse | No | Good with `--viz quiver` |
+| `tvl1` | Dense | No | Sharp edges, slow |
+| `lucas-kanade` | Sparse | No | Experimental: output is currently near-empty ([#15](https://github.com/roaldarbol/motionflow/issues/15)) |
 | `raft` | Dense | Yes | High quality; weights auto-downloaded |
-| `sea-raft` | Dense | Yes | ECCV 2024; coming soon |
-| `neuflow` | Dense | Yes | Edge-optimised; coming soon |
+| `sea-raft` | Dense | Yes | ECCV 2024; not working in this release ([#16](https://github.com/roaldarbol/motionflow/issues/16)) |
+| `neuflow` | Dense | Yes | Edge-optimised; not working in this release ([#16](https://github.com/roaldarbol/motionflow/issues/16)) |
 
 ## Documentation
 

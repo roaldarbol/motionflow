@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
 from types import TracebackType
-from typing import Iterator
 
 import cv2
 import numpy as np

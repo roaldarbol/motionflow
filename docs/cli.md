@@ -24,7 +24,7 @@ motionflow [OPTIONS] INPUT
 | `--normalize MODE` | `per-frame` | Magnitude normalisation: `per-frame` or `global`. |
 | `--max-flow FLOAT` | — | Manual magnitude cap. Overrides `--normalize`. |
 | `--smooth INT` | `0` | Temporal smoothing window in frames. |
-| `--codec TEXT` | `mp4v` | FourCC codec string for output. |
+| `--codec TEXT` | `auto` | FourCC codec string for output. `auto` picks one that fits the output file's extension. |
 | `--fps FLOAT` | — | Output FPS. Preserves source FPS if not set. |
 | `--device TEXT` | `auto` | Device for deep methods: `auto`, `cuda`, `mps`, `cpu`. |
 | `--model-size SIZE` | `large` | Model size for RAFT/SEA-RAFT: `small` or `large`. |

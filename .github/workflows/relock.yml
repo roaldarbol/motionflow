@@ -1,0 +1,56 @@
+name: Relock
+
+# Refresh pixi.lock on a clean runner: Dependabot can't update pixi.lock.
+# Run it by hand; it commits the new lock to the branch it runs on, then
+# triggers CI on that commit.
+on:
+  workflow_dispatch:
+    inputs:
+      packages:
+        description: "Packages to update (space-separated). Leave empty for a full update."
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+  actions: write # to trigger CI on the new lock commit (see the last step)
+
+jobs:
+  relock:
+    name: Update pixi.lock
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up pixi
+        uses: prefix-dev/setup-pixi@v0.11.2
+        with:
+          pixi-version: v0.82.0
+          run-install: false
+
+      - name: Update lockfile
+        run: pixi update ${{ inputs.packages }}
+
+      - name: Commit refreshed lock
+        id: commit
+        run: |
+          if git diff --quiet pixi.lock; then
+            echo "pixi.lock already up to date; nothing to commit."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pixi.lock
+          git commit -m "chore: relock pixi.lock (pixi update ${{ inputs.packages }})"
+          git push
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      # A commit pushed with GITHUB_TOKEN doesn't trigger CI, so start it here.
+      - name: Trigger CI on the new lock
+        if: steps.commit.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run ci.yml --ref "${{ github.ref_name }}"
+          gh workflow run docs.yml --ref "${{ github.ref_name }}"

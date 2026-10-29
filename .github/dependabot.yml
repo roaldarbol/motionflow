@@ -1,15 +1,8 @@
 version: 2
 updates:
-  # Refresh uv.lock monthly, grouped into a single PR to keep the noise down.
-  - package-ecosystem: "uv"
-    directory: "/"
-    schedule:
-      interval: "monthly"
-    groups:
-      uv:
-        patterns: ["*"]
-
+  # pixi.lock is refreshed by the Relock workflow; Dependabot can't update it.
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
+    labels: ["dependencies", "github_actions"]

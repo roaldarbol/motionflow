@@ -1,13 +1,13 @@
 # Tests for classical optical flow estimators:
 # - FarnebackFlow: output shape, dtype, non-zero flow on motion
 # - LucasKanadeFlow: output shape, dtype, sparse flow characteristics
-# - TVL1Flow: skipped if opencv-contrib not available
+# - TVL1Flow: output shape, dtype, non-zero flow on motion
 # - make_estimator: correct class returned per Method
-import pytest
 import numpy as np
+import pytest
 
 from motionflow.methods import make_estimator
-from motionflow.methods.classical import FarnebackFlow, LucasKanadeFlow
+from motionflow.methods.classical import FarnebackFlow, LucasKanadeFlow, TVL1Flow
 from motionflow.types import Method
 
 
@@ -58,16 +58,17 @@ class TestLucasKanadeFlow:
 
 
 class TestTVL1Flow:
-    def test_import_or_skip(self, checkerboard_frame, shifted_frame):
-        try:
-            from motionflow.methods.classical import TVL1Flow
+    def test_output_shape_and_dtype(self, checkerboard_frame, shifted_frame):
+        flow = TVL1Flow()(checkerboard_frame, shifted_frame)
+        assert flow.shape == (120, 160, 2)
+        assert flow.dtype == np.float32
 
-            flow = TVL1Flow()(checkerboard_frame, shifted_frame)
-            assert flow.shape == (120, 160, 2)
-        except RuntimeError as exc:
-            if "opencv-contrib" in str(exc):
-                pytest.skip("opencv-contrib not available")
-            raise
+    def test_detects_horizontal_motion(self, checkerboard_frame, shifted_frame):
+        flow = TVL1Flow()(checkerboard_frame, shifted_frame)
+        mean_dx = float(np.mean(flow[..., 0]))
+        mean_dy = float(np.mean(flow[..., 1]))
+        assert mean_dx > 0.5, f"Expected positive dx, got {mean_dx}"
+        assert abs(mean_dy) < 1.0, f"Expected near-zero dy, got {mean_dy}"
 
 
 class TestMakeEstimator:

@@ -1,0 +1,149 @@
+# pixi.toml: development environments for motionflow
+#
+# Install pixi:  https://pixi.sh
+# Setup:         pixi install && pixi run lefthook install
+# Run CLI:       pixi run motionflow input.mp4
+# Run tests:     pixi run test
+#
+# The package itself is built with hatchling from pyproject.toml and published
+# to PyPI; this file only describes how to develop it.
+
+[workspace]
+name = "motionflow"
+channels = ["conda-forge"]
+# Keep in step with pixi-version in .github/workflows (CI pins the same pixi).
+requires-pixi = ">=0.82.0"
+platforms = [
+    "linux-64",
+    "osx-64",
+    "osx-arm64",
+    "win-64",
+    # The same platforms with an NVIDIA GPU, for the `cuda` environment.
+    { name = "linux-64-cuda", platform = "linux-64", cuda = "12.9" },
+    { name = "win-64-cuda", platform = "win-64", cuda = "12.9" },
+]
+
+# conda-forge's OpenCV includes the contrib modules, so it provides every PyPI
+# OpenCV variant; the default mapping only knows it as opencv-python. Without
+# this, pixi also installs the opencv-contrib-python-headless wheel that
+# motionflow requires, and the two overwrite each other's cv2/ files.
+[workspace.conda-pypi-map.conda-forge]
+mapping-mode = "overlay"
+mapping = { py-opencv = [
+    "opencv-python",
+    "opencv-python-headless",
+    "opencv-contrib-python",
+    "opencv-contrib-python-headless",
+] }
+
+# ---------------------------------------------------------------------------
+# Conda dependencies
+# ---------------------------------------------------------------------------
+
+[dependencies]
+python = ">=3.10"
+# OpenCV from conda-forge includes the contrib modules (TV-L1), and satisfies
+# motionflow's PyPI requirement on opencv-contrib-python-headless, so pixi
+# doesn't also install the wheel: two packages providing cv2 break each other.
+opencv = ">=4.8"
+numpy = ">=1.24"
+typer = ">=0.12"
+rich = ">=13"
+tqdm = ">=4.66"
+
+[pypi-dependencies]
+motionflow = { path = ".", editable = true }
+
+# ---------------------------------------------------------------------------
+# Features
+# ---------------------------------------------------------------------------
+
+[feature.dev.dependencies]
+pytest = ">=8"
+pytest-cov = ">=5"
+ruff = ">=0.15"
+lefthook = ">=2"
+
+[feature.dev.tasks]
+test = "python -m pytest"
+test-cov = "python -m pytest --cov=motionflow --cov-report=term-missing --cov-report=xml"
+lint = "ruff check src tests"
+lint-fix = "ruff check --fix src tests"
+format = "ruff format src tests"
+format-check = "ruff format --check src tests"
+lefthook = "lefthook"
+
+[feature.docs.dependencies]
+zensical = ">=0.0.24"
+mkdocstrings-python = ">=1.10"
+
+[feature.docs.tasks]
+docs = "zensical build"
+docs-serve = "zensical serve"
+
+# PyTorch for the deep methods. On its own this solves to conda-forge's CPU
+# builds, which install anywhere.
+[feature.torch.dependencies]
+pytorch = ">=2.1"
+torchvision = ">=0.16"
+
+# The CUDA builds, on the CUDA platforms declared above. The build constraint
+# is needed: left to choose, the solver prefers a newer CPU build over an
+# older CUDA one. Installing needs an NVIDIA driver supporting CUDA 12.9; to
+# install anyway on a machine without one (CI, say), set
+# CONDA_OVERRIDE_CUDA=12.9.
+[feature.cuda]
+platforms = ["linux-64-cuda", "win-64-cuda"]
+
+[feature.cuda.dependencies]
+pytorch = { version = "*", build = "cuda*" }
+
+# Every other environment: the plain platforms only, so they aren't solved a
+# second time for the CUDA platforms.
+[feature.cpu]
+platforms = ["linux-64", "osx-64", "osx-arm64", "win-64"]
+
+[feature.py310.dependencies]
+python = "3.10.*"
+
+[feature.py311.dependencies]
+python = "3.11.*"
+
+[feature.py312.dependencies]
+python = "3.12.*"
+
+[feature.py313.dependencies]
+python = "3.13.*"
+
+[feature.py314.dependencies]
+python = "3.14.*"
+
+# Release builds only need Python and the build frontend.
+[feature.build.dependencies]
+python = "3.13.*"
+python-build = ">=1.0"
+
+[feature.build.tasks]
+build = "python -m build"
+
+# ---------------------------------------------------------------------------
+# Environments
+# ---------------------------------------------------------------------------
+
+[environments]
+default = { features = ["cpu", "dev", "py313"], solve-group = "default" }
+docs = { features = ["cpu", "docs", "py313"], solve-group = "default" }
+torch = ["cpu", "dev", "torch", "py313"]
+cuda = ["dev", "torch", "cuda", "py313"]
+py310 = ["cpu", "dev", "py310"]
+py311 = ["cpu", "dev", "py311"]
+py312 = ["cpu", "dev", "py312"]
+py314 = ["cpu", "dev", "py314"]
+build = { features = ["cpu", "build"], no-default-feature = true }
+
+# ---------------------------------------------------------------------------
+# Tasks available in every environment
+# ---------------------------------------------------------------------------
+
+[tasks]
+motionflow = "motionflow"

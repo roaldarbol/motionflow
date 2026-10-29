@@ -62,8 +62,8 @@ class TVL1Flow(FlowEstimator):
 
     Produces sharper motion boundaries than Farneback at the cost of speed.
 
-    Requires ``opencv-contrib-python-headless`` on PyPI (or plain ``opencv``
-    on conda-forge, which includes contrib by default).
+    Uses OpenCV's contrib modules, which motionflow installs
+    (``opencv-contrib-python-headless`` on PyPI; ``opencv`` on conda-forge).
 
     Args:
         tau: Time step of the numerical scheme.
@@ -72,7 +72,9 @@ class TVL1Flow(FlowEstimator):
         scales_number: Number of scales in the pyramid.
         warps: Number of warpings per scale.
         epsilon: Stopping criterion threshold.
-        iterations: Maximum number of iterations per scale.
+        inner_iterations: Iterations between outlier filtering steps.
+        outer_iterations: Maximum number of outer iterations per warp; the
+            scheme stops earlier once it converges to within ``epsilon``.
     """
 
     def __init__(
@@ -83,10 +85,18 @@ class TVL1Flow(FlowEstimator):
         scales_number: int = 5,
         warps: int = 5,
         epsilon: float = 0.01,
-        iterations: int = 300,
+        inner_iterations: int = 30,
+        outer_iterations: int = 10,
     ) -> None:
         self._estimator = self._create_estimator(
-            tau, lambda_, theta, scales_number, warps, epsilon, iterations
+            tau,
+            lambda_,
+            theta,
+            scales_number,
+            warps,
+            epsilon,
+            inner_iterations,
+            outer_iterations,
         )
 
     @staticmethod
@@ -97,7 +107,8 @@ class TVL1Flow(FlowEstimator):
         scales_number: int,
         warps: int,
         epsilon: float,
-        iterations: int,
+        inner_iterations: int,
+        outer_iterations: int,
     ) -> cv2.DualTVL1OpticalFlow:
         try:
             est = cv2.optflow.DualTVL1OpticalFlow_create()
@@ -107,17 +118,20 @@ class TVL1Flow(FlowEstimator):
             except AttributeError:
                 raise RuntimeError(
                     "TV-L1 optical flow is not available in your OpenCV build. "
-                    "Install opencv-contrib-python-headless:\n"
-                    "  pip install opencv-contrib-python-headless\n"
-                    "On conda-forge, opencv includes contrib by default."
+                    "It needs OpenCV's contrib modules, which motionflow installs as "
+                    "opencv-contrib-python-headless. If another OpenCV wheel "
+                    "(opencv-python, opencv-python-headless, …) is installed too, "
+                    "they overwrite each other's files: uninstall every OpenCV "
+                    "wheel, then reinstall opencv-contrib-python-headless."
                 ) from None
         est.setTau(tau)
         est.setLambda(lambda_)
         est.setTheta(theta)
         est.setScalesNumber(scales_number)
-        est.setWarps(warps)
+        est.setWarpingsNumber(warps)
         est.setEpsilon(epsilon)
-        est.setOuterIterations(iterations)
+        est.setInnerIterations(inner_iterations)
+        est.setOuterIterations(outer_iterations)
         return est
 
     def estimate(self, prev: np.ndarray, curr: np.ndarray) -> np.ndarray:
@@ -156,11 +170,11 @@ class LucasKanadeFlow(FlowEstimator):
         self.min_distance = min_distance
         self.win_size = win_size
         self.max_level = max_level
-        self._lk_params = dict(
-            winSize=win_size,
-            maxLevel=max_level,
-            criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 30, 0.01),
-        )
+        self._lk_params = {
+            "winSize": win_size,
+            "maxLevel": max_level,
+            "criteria": (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 30, 0.01),
+        }
 
     def estimate(self, prev: np.ndarray, curr: np.ndarray) -> np.ndarray:
         h, w = prev.shape[:2]
@@ -190,7 +204,7 @@ class LucasKanadeFlow(FlowEstimator):
         good_next = next_pts[status.ravel() == 1]
 
         for (x0, y0), (x1, y1) in zip(
-            good_prev.reshape(-1, 2), good_next.reshape(-1, 2)
+            good_prev.reshape(-1, 2), good_next.reshape(-1, 2), strict=True
         ):
             xi, yi = int(round(x0)), int(round(y0))
             if 0 <= yi < h and 0 <= xi < w:

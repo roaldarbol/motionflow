@@ -9,7 +9,7 @@
 pip install motionflow
 
 # Install with deep learning support
-pip install motionflow[torch]
+pip install "motionflow[torch]"
 
 # Run on a video
 motionflow input.mp4
@@ -19,9 +19,9 @@ This produces `input_flow.mp4` in the same directory using the Farneback method 
 
 ## Features
 
-- Six optical flow methods: Farneback, TV-L1, Lucas-Kanade, RAFT, SEA-RAFT, NeuFlow v2
-- Four visualisation styles: HSV colour wheel, magnitude heatmap, quiver overlay, blend
+- Optical flow methods: Farneback, TV-L1, Lucas-Kanade and RAFT (SEA-RAFT and NeuFlow v2 are being reworked, [#16](https://github.com/roaldarbol/motionflow/issues/16))
+- Visualisation styles: HSV colour wheel, magnitude heatmap, quiver overlay; any of them can be blended with the original frame
 - Streaming frame-by-frame processing — handles multi-hour videos without loading into memory
 - GPU acceleration for deep methods via PyTorch (CUDA, MPS, CPU)
-- Python API mirrors the CLI exactly — usable in notebooks or custom pipelines
-- Available on PyPI and conda-forge
+- Python API with the same options as the CLI, usable in notebooks or custom pipelines
+- Available on PyPI (conda-forge planned)
