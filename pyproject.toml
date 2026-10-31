@@ -73,6 +73,11 @@ environments = [
     "sys_platform == 'win32'",
     "sys_platform == 'linux'",
 ]
+# torch <2.13 has known advisories. Intel Macs stay on 2.2.2, the last release with
+# wheels for them. This constrains uv.lock only, not the published requirements.
+constraint-dependencies = [
+    "torch>=2.13; sys_platform != 'darwin' or platform_machine == 'arm64'",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
